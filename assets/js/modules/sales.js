@@ -304,9 +304,7 @@ export function createSalesModule(ctx) {
           <tbody>
             ${state.cart.map((item) => `
               <tr>
-                <td>
-                  <strong>${escapeHtml(item.name)}</strong>
-                </td>
+                <td><strong>${escapeHtml(item.name)}</strong></td>
                 <td>${currency(Number(item.salePrice || 0))}</td>
                 <td>${Number(item.quantity || 0)}</td>
                 <td>${currency(Number(item.salePrice || 0) * Number(item.quantity || 0))}</td>
@@ -1442,7 +1440,7 @@ export function createSalesModule(ctx) {
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns:minmax(0, 1.65fr) minmax(320px, 0.95fr); gap:16px; align-items:start;">
+        <div class="sales-main-grid">
           <div class="section-stack">
             <div class="panel">
               <div class="section-header">
@@ -1482,7 +1480,7 @@ export function createSalesModule(ctx) {
           </div>
 
           <div class="section-stack">
-            <div class="panel">
+            <div class="panel cash-highlight">
               <div class="section-header">
                 <div>
                   <h3>Resumo da venda</h3>
@@ -1528,13 +1526,31 @@ export function createSalesModule(ctx) {
                 </div>
               </div>
 
-              <div style="display:grid; gap:8px; margin-top:12px;">
-                <div class="list-row"><strong>F2</strong><span>Focar busca de produto</span></div>
-                <div class="list-row"><strong>F3</strong><span>Selecionar cliente</span></div>
-                <div class="list-row"><strong>F4</strong><span>Limpar cliente</span></div>
-                <div class="list-row"><strong>F8</strong><span>Finalizar venda</span></div>
-                <div class="list-row"><strong>ESC</strong><span>Limpar carrinho</span></div>
-                <div class="list-row"><strong>ENTER</strong><span>Adicionar produto pelo código digitado</span></div>
+              <div class="shortcut-card" style="margin-top:12px;">
+                <div class="shortcut-row">
+                  <span class="shortcut-key">F2</span>
+                  <span class="shortcut-label">Focar busca de produto</span>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-key">F3</span>
+                  <span class="shortcut-label">Selecionar cliente</span>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-key">F4</span>
+                  <span class="shortcut-label">Limpar cliente</span>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-key">F8</span>
+                  <span class="shortcut-label">Finalizar venda</span>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-key">ESC</span>
+                  <span class="shortcut-label">Limpar carrinho</span>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-key">ENTER</span>
+                  <span class="shortcut-label">Adicionar produto pelo código digitado</span>
+                </div>
               </div>
             </div>
           </div>
