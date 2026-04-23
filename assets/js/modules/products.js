@@ -64,11 +64,18 @@ export function createProductsModule(ctx) {
   function getProductSummary() {
     const allProducts = getRows();
     const activeProducts = allProducts.filter((item) => item.status !== 'inativo');
+
     const lowStockCount = activeProducts.filter(
       (item) => Number(item.quantity || 0) <= Number(state.settings?.lowStockThreshold || 5)
     ).length;
+
     const inventoryValue = activeProducts.reduce(
       (sum, item) => sum + (Number(item.quantity || 0) * Number(item.costPrice || 0)),
+      0
+    );
+
+    const inventorySaleValue = activeProducts.reduce(
+      (sum, item) => sum + (Number(item.quantity || 0) * Number(item.salePrice || 0)),
       0
     );
 
@@ -76,7 +83,8 @@ export function createProductsModule(ctx) {
       totalCount: allProducts.length,
       activeCount: activeProducts.length,
       lowStockCount,
-      inventoryValue
+      inventoryValue,
+      inventorySaleValue
     };
   }
 
@@ -681,11 +689,31 @@ export function createProductsModule(ctx) {
 
     tabEls.products.innerHTML = `
       <div class="section-stack">
-        <div class="cards-grid">
-          <div class="metric-card"><span>Total de produtos</span><strong>${summary.totalCount}</strong></div>
-          <div class="metric-card"><span>Produtos ativos</span><strong>${summary.activeCount}</strong></div>
-          <div class="metric-card"><span>Estoque baixo</span><strong>${summary.lowStockCount}</strong></div>
-          <div class="metric-card"><span>Valor em custo</span><strong>${currency(summary.inventoryValue)}</strong></div>
+        <div class="cards-grid" style="grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;">
+          <div class="metric-card" style="min-height: 62px; padding: 12px;">
+            <span>Total de produtos</span>
+            <strong>${summary.totalCount}</strong>
+          </div>
+
+          <div class="metric-card" style="min-height: 62px; padding: 12px;">
+            <span>Produtos ativos</span>
+            <strong>${summary.activeCount}</strong>
+          </div>
+
+          <div class="metric-card" style="min-height: 62px; padding: 12px;">
+            <span>Estoque baixo</span>
+            <strong>${summary.lowStockCount}</strong>
+          </div>
+
+          <div class="metric-card" style="min-height: 62px; padding: 12px;">
+            <span>Valor em custo</span>
+            <strong>${currency(summary.inventoryValue)}</strong>
+          </div>
+
+          <div class="metric-card" style="min-height: 62px; padding: 12px;">
+            <span>Valor em venda</span>
+            <strong>${currency(summary.inventorySaleValue)}</strong>
+          </div>
         </div>
 
         <div class="entity-toolbar panel">
