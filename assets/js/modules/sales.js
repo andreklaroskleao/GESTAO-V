@@ -1496,11 +1496,135 @@ export function createSalesModule(ctx) {
   }
 
   function render() {
-    const { subtotal, discount, total, change } = calculateCartTotal();
+  const { subtotal, discount, total, change } = calculateCartTotal();
 
-    tabEls.sales.innerHTML = `
-      <div class="section-stack sales-modern-layout sales-layout-v3">
-        <div class="sales-workspace-grid">
+  tabEls.sales.innerHTML = `
+    <div class="sales-compact-page">
+      <style>
+        .sales-compact-page {
+          height: calc(100vh - 78px);
+          overflow: hidden;
+        }
+
+        .sales-compact-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 430px;
+          gap: 12px;
+          height: 100%;
+          min-height: 0;
+        }
+
+        .sales-compact-left {
+          display: grid;
+          grid-template-rows: auto auto minmax(0, 1fr);
+          gap: 10px;
+          min-height: 0;
+        }
+
+        .sales-compact-page .panel {
+          padding: 12px;
+          border-radius: 12px;
+        }
+
+        .sales-compact-page .section-header {
+          margin-bottom: 8px;
+        }
+
+        .sales-compact-page h2,
+        .sales-compact-page h3 {
+          margin: 0;
+        }
+
+        .sales-compact-page .muted {
+          font-size: 12px;
+        }
+
+        .sale-top-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+          align-items: end;
+        }
+
+        .sale-client-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 8px;
+        }
+
+        .sale-search-results-v3 {
+          min-height: 76px;
+          max-height: 128px;
+          overflow: auto;
+        }
+
+        .sale-cart-panel {
+          min-height: 0;
+          overflow: hidden;
+        }
+
+        .sale-cart-items-v3 {
+          height: calc(100vh - 415px);
+          min-height: 150px;
+          overflow: auto;
+        }
+
+        .sale-summary-panel {
+          height: fit-content;
+          position: sticky;
+          top: 0;
+        }
+
+        .sale-summary-panel textarea {
+          min-height: 54px;
+          max-height: 70px;
+        }
+
+        .sale-summary-panel .summary-box {
+          margin-top: 10px !important;
+        }
+
+        .sale-summary-panel .form-actions {
+          margin-top: 10px !important;
+        }
+
+        .sales-compact-page input,
+        .sales-compact-page select,
+        .sales-compact-page textarea {
+          min-height: 36px;
+        }
+
+        .sales-compact-page .btn {
+          min-height: 36px;
+          padding-top: 8px;
+          padding-bottom: 8px;
+        }
+
+        @media (max-width: 1100px) {
+          .sales-compact-page {
+            height: auto;
+            overflow: visible;
+          }
+
+          .sales-compact-grid {
+            grid-template-columns: 1fr;
+            height: auto;
+          }
+
+          .sale-cart-items-v3 {
+            height: auto;
+            max-height: 360px;
+          }
+
+          .sale-summary-panel {
+            position: static;
+          }
+        }
+      </style>
+
+      <div class="sales-compact-grid">
+        <div class="sales-compact-left">
           <div class="panel sale-customer-panel">
             <div class="section-header">
               <div>
@@ -1513,73 +1637,26 @@ export function createSalesModule(ctx) {
               </div>
             </div>
 
-            <div class="sale-customer-grid" style="margin-top:12px;">
-              <label class="sale-customer-name-field">
+            <div class="sale-top-row">
+              <label>
                 Cliente
                 <input id="sale-customer-name" type="text" value="" placeholder="Deixe em branco para cliente não identificado" />
               </label>
 
-              <label class="sale-customer-cpf-check">
-                <span style="display:flex; align-items:center; gap:8px; min-height:42px;">
-                  <input id="sale-include-cpf" type="checkbox" style="width:auto;" />
-                  <span>Inserir CPF no cupom</span>
-                </span>
-              </label>
-
-              <label id="sale-cpf-wrap" class="sale-customer-cpf-field" style="display:none;">
-                CPF
-                <input id="sale-customer-cpf" type="text" placeholder="Digite o CPF do cliente" />
+              <label style="display:flex; align-items:center; gap:8px; min-height:36px;">
+                <input id="sale-include-cpf" type="checkbox" style="width:auto;" />
+                <span>Inserir CPF no cupom</span>
               </label>
             </div>
 
-            <div class="form-actions" style="margin-top:12px;">
+            <label id="sale-cpf-wrap" style="display:none; margin-top:8px;">
+              CPF
+              <input id="sale-customer-cpf" type="text" placeholder="Digite o CPF do cliente" />
+            </label>
+
+            <div class="sale-client-actions">
               <button class="btn btn-secondary" type="button" id="sale-select-client-btn">Selecionar cliente</button>
               <button class="btn btn-secondary" type="button" id="sale-clear-client-btn">Limpar cliente</button>
-            </div>
-          </div>
-
-          <div class="panel cash-highlight sale-summary-panel">
-            <div class="section-header">
-              <div>
-                <h3>Resumo da venda</h3>
-                <span class="muted">Valores e fechamento</span>
-              </div>
-            </div>
-
-            <div class="form-grid sale-summary-grid" style="margin-top:12px;">
-              <label style="grid-column:1 / -1;">
-                Forma de pagamento
-                <select id="sale-payment-method">
-                  ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
-                </select>
-              </label>
-
-              <label>
-                Desconto
-                <input name="discount" type="number" step="0.01" min="0" value="0" />
-              </label>
-
-              <label>
-                Valor pago
-                <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
-              </label>
-
-              <label style="grid-column:1 / -1;">
-                Observações
-                <textarea name="notes" placeholder="Observações da venda"></textarea>
-              </label>
-            </div>
-
-            <div class="summary-box" style="margin-top:14px;">
-              <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
-              <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
-              <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
-              <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
-            </div>
-
-            <div class="form-actions sale-summary-actions" style="margin-top:14px; display:grid; grid-template-columns:1fr; gap:10px;">
-              <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
-              <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
             </div>
           </div>
 
@@ -1592,19 +1669,15 @@ export function createSalesModule(ctx) {
               <span class="muted">Atalho: F2</span>
             </div>
 
-            <div class="sales-search-toolbar" style="margin-top:12px;">
-              <div class="sales-search-main">
-                <input
-                  id="sale-product-search"
-                  type="text"
-                  placeholder="Digite nome do produto ou código de barras"
-                  autocomplete="off"
-                  value="${escapeHtml(searchTerm)}"
-                />
-              </div>
-            </div>
+            <input
+              id="sale-product-search"
+              type="text"
+              placeholder="Digite nome do produto ou código de barras"
+              autocomplete="off"
+              value="${escapeHtml(searchTerm)}"
+            />
 
-            <div id="sale-search-results" class="panel-scroll sale-search-results-v3" style="margin-top:12px;"></div>
+            <div id="sale-search-results" class="panel-scroll sale-search-results-v3" style="margin-top:8px;"></div>
           </div>
 
           <div class="panel sale-cart-panel">
@@ -1616,137 +1689,147 @@ export function createSalesModule(ctx) {
               <span class="muted"><span id="sale-items-count">${state.cart.length}</span> item(ns)</span>
             </div>
 
-            <div id="sale-cart-items" class="panel-scroll sale-cart-items-v3" style="margin-top:12px;"></div>
+            <div id="sale-cart-items" class="panel-scroll sale-cart-items-v3"></div>
           </div>
         </div>
 
-        <div class="panel sale-shortcuts-panel">
+        <div class="panel cash-highlight sale-summary-panel">
           <div class="section-header">
             <div>
-              <h3>Atalhos do teclado</h3>
-              <span class="muted">Ajuda rápida para o operador</span>
+              <h3>Resumo da venda</h3>
+              <span class="muted">Valores e fechamento</span>
             </div>
           </div>
 
-          <div class="shortcut-card sale-shortcuts-row" style="margin-top:12px;">
-            <div class="shortcut-row">
-              <span class="shortcut-key">F2</span>
-              <span class="shortcut-label">Buscar produto</span>
-            </div>
-            <div class="shortcut-row">
-              <span class="shortcut-key">F3</span>
-              <span class="shortcut-label">Selecionar cliente</span>
-            </div>
-            <div class="shortcut-row">
-              <span class="shortcut-key">F4</span>
-              <span class="shortcut-label">Limpar cliente</span>
-            </div>
-            <div class="shortcut-row">
-              <span class="shortcut-key">F7</span>
-              <span class="shortcut-label">Abrir histórico</span>
-            </div>
-            <div class="shortcut-row">
-              <span class="shortcut-key">F8</span>
-              <span class="shortcut-label">Finalizar venda</span>
-            </div>
-            <div class="shortcut-row">
-              <span class="shortcut-key">ESC</span>
-              <span class="shortcut-label">Limpar carrinho</span>
-            </div>
+          <div class="form-grid sale-summary-grid">
+            <label style="grid-column:1 / -1;">
+              Forma de pagamento
+              <select id="sale-payment-method">
+                ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
+              </select>
+            </label>
+
+            <label>
+              Desconto
+              <input name="discount" type="number" step="0.01" min="0" value="0" />
+            </label>
+
+            <label>
+              Valor pago
+              <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
+            </label>
+
+            <label style="grid-column:1 / -1;">
+              Observações
+              <textarea name="notes" placeholder="Observações da venda"></textarea>
+            </label>
+          </div>
+
+          <div class="summary-box">
+            <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
+            <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
+            <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
+            <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
+          </div>
+
+          <div class="form-actions sale-summary-actions" style="display:grid; grid-template-columns:1fr; gap:8px;">
+            <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
+            <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
           </div>
         </div>
       </div>
-    `;
+    </div>
+  `;
 
-    const searchInput = tabEls.sales.querySelector('#sale-product-search');
+  const searchInput = tabEls.sales.querySelector('#sale-product-search');
 
-    searchInput?.addEventListener('input', (event) => {
-      searchTerm = event.currentTarget.value || '';
-      renderSearchResults();
-    });
-
-    searchInput?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        tryAddProductByBarcode(event.currentTarget.value || '', true);
-      }
-    });
-
-    bindAsyncButton(
-      tabEls.sales.querySelector('#sale-select-client-btn'),
-      async () => {
-        openClientPicker({
-          onSelect: (client) => {
-            const input = tabEls.sales.querySelector('#sale-customer-name');
-            const cpfCheck = tabEls.sales.querySelector('#sale-include-cpf');
-            const cpfInput = tabEls.sales.querySelector('#sale-customer-cpf');
-            const clientCpf = getClientCpf(client);
-
-            if (input) input.value = client?.name || '';
-            if (clientCpf) {
-              if (cpfCheck) cpfCheck.checked = true;
-              if (cpfInput) cpfInput.value = clientCpf;
-            }
-
-            bindCpfToggle();
-          }
-        });
-      },
-      { busyLabel: 'Abrindo...' }
-    );
-
-    bindAsyncButton(
-      tabEls.sales.querySelector('#sale-clear-client-btn'),
-      async () => {
-        const clientInput = tabEls.sales.querySelector('#sale-customer-name');
-        const cpfCheck = tabEls.sales.querySelector('#sale-include-cpf');
-        const cpfInput = tabEls.sales.querySelector('#sale-customer-cpf');
-
-        if (clientInput) clientInput.value = '';
-        if (cpfCheck) cpfCheck.checked = false;
-        if (cpfInput) cpfInput.value = '';
-
-        bindCpfToggle();
-        showToast('Cliente limpo.', 'info');
-      },
-      { busyLabel: 'Limpando...' }
-    );
-
-    bindAsyncButton(
-      tabEls.sales.querySelector('#sale-open-history-btn'),
-      async () => {
-        openHistoryModal();
-      },
-      { busyLabel: 'Abrindo...' }
-    );
-
-    tabEls.sales.querySelector('#sale-payment-method')?.addEventListener('change', updateSaleSummary);
-    tabEls.sales.querySelector('input[name="discount"]')?.addEventListener('input', updateSaleSummary);
-    tabEls.sales.querySelector('input[name="amountPaid"]')?.addEventListener('input', updateSaleSummary);
-
-    bindAsyncButton(
-      tabEls.sales.querySelector('#finish-sale-btn'),
-      async () => {
-        await finishSale();
-      },
-      { busyLabel: 'Finalizando...' }
-    );
-
-    bindAsyncButton(
-      tabEls.sales.querySelector('#clear-cart-btn'),
-      async () => {
-        clearCartWithFeedback();
-      },
-      { busyLabel: 'Limpando...' }
-    );
-
+  searchInput?.addEventListener('input', (event) => {
+    searchTerm = event.currentTarget.value || '';
     renderSearchResults();
-    renderCart();
-    updateSaleSummary();
-    bindCpfToggle();
-    bindKeyboardShortcuts();
-    focusSearchInput();
-  }
+  });
+
+  searchInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      tryAddProductByBarcode(event.currentTarget.value || '', true);
+    }
+  });
+
+  bindAsyncButton(
+    tabEls.sales.querySelector('#sale-select-client-btn'),
+    async () => {
+      openClientPicker({
+        onSelect: (client) => {
+          const input = tabEls.sales.querySelector('#sale-customer-name');
+          const cpfCheck = tabEls.sales.querySelector('#sale-include-cpf');
+          const cpfInput = tabEls.sales.querySelector('#sale-customer-cpf');
+          const clientCpf = getClientCpf(client);
+
+          if (input) input.value = client?.name || '';
+          if (clientCpf) {
+            if (cpfCheck) cpfCheck.checked = true;
+            if (cpfInput) cpfInput.value = clientCpf;
+          }
+
+          bindCpfToggle();
+        }
+      });
+    },
+    { busyLabel: 'Abrindo...' }
+  );
+
+  bindAsyncButton(
+    tabEls.sales.querySelector('#sale-clear-client-btn'),
+    async () => {
+      const clientInput = tabEls.sales.querySelector('#sale-customer-name');
+      const cpfCheck = tabEls.sales.querySelector('#sale-include-cpf');
+      const cpfInput = tabEls.sales.querySelector('#sale-customer-cpf');
+
+      if (clientInput) clientInput.value = '';
+      if (cpfCheck) cpfCheck.checked = false;
+      if (cpfInput) cpfInput.value = '';
+
+      bindCpfToggle();
+      showToast('Cliente limpo.', 'info');
+    },
+    { busyLabel: 'Limpando...' }
+  );
+
+  bindAsyncButton(
+    tabEls.sales.querySelector('#sale-open-history-btn'),
+    async () => {
+      openHistoryModal();
+    },
+    { busyLabel: 'Abrindo...' }
+  );
+
+  tabEls.sales.querySelector('#sale-payment-method')?.addEventListener('change', updateSaleSummary);
+  tabEls.sales.querySelector('input[name="discount"]')?.addEventListener('input', updateSaleSummary);
+  tabEls.sales.querySelector('input[name="amountPaid"]')?.addEventListener('input', updateSaleSummary);
+
+  bindAsyncButton(
+    tabEls.sales.querySelector('#finish-sale-btn'),
+    async () => {
+      await finishSale();
+    },
+    { busyLabel: 'Finalizando...' }
+  );
+
+  bindAsyncButton(
+    tabEls.sales.querySelector('#clear-cart-btn'),
+    async () => {
+      clearCartWithFeedback();
+    },
+    { busyLabel: 'Limpando...' }
+  );
+
+  renderSearchResults();
+  renderCart();
+  updateSaleSummary();
+  bindCpfToggle();
+  bindKeyboardShortcuts();
+  focusSearchInput();
+}
 
   return {
     render
