@@ -83,11 +83,17 @@ export function createSalesModule(ctx) {
   function updateSaleSummary() {
     const { subtotal, discount, total, change } = calculateCartTotal();
 
-    tabEls.sales.querySelector('#sale-subtotal').textContent = currency(subtotal);
-    tabEls.sales.querySelector('#sale-discount-view').textContent = currency(discount);
-    tabEls.sales.querySelector('#sale-total').textContent = currency(total);
-    tabEls.sales.querySelector('#sale-change').textContent = currency(change);
-    tabEls.sales.querySelector('#sale-items-count').textContent = String((state.cart || []).length);
+    const subtotalEl = tabEls.sales.querySelector('#sale-subtotal');
+    const discountEl = tabEls.sales.querySelector('#sale-discount-view');
+    const totalEl = tabEls.sales.querySelector('#sale-total');
+    const changeEl = tabEls.sales.querySelector('#sale-change');
+    const countEl = tabEls.sales.querySelector('#sale-items-count');
+
+    if (subtotalEl) subtotalEl.textContent = currency(subtotal);
+    if (discountEl) discountEl.textContent = currency(discount);
+    if (totalEl) totalEl.textContent = currency(total);
+    if (changeEl) changeEl.textContent = currency(change);
+    if (countEl) countEl.textContent = String((state.cart || []).length);
   }
 
   function normalizeCustomerName(value) {
@@ -239,7 +245,7 @@ export function createSalesModule(ctx) {
           .toLowerCase()
           .includes(term)
       )
-      .slice(0, 8);
+      .slice(0, 10);
 
     resultsEl.innerHTML =
       results
@@ -248,7 +254,9 @@ export function createSalesModule(ctx) {
             <div class="list-row">
               <div>
                 <strong>${escapeHtml(product.name)}</strong>
-                <div class="muted">${escapeHtml(product.barcode || 'Sem código')} · Estoque: ${Number(product.quantity || 0)} · ${currency(product.salePrice || 0)}</div>
+                <div class="muted">
+                  ${escapeHtml(product.barcode || 'Sem código')} · Estoque: ${Number(product.quantity || 0)} · ${currency(product.salePrice || 0)}
+                </div>
               </div>
               <button class="btn btn-secondary" type="button" data-add-product="${escapeHtml(product.id)}">Adicionar</button>
             </div>
@@ -281,24 +289,40 @@ export function createSalesModule(ctx) {
       return;
     }
 
-    cartEl.innerHTML = state.cart
-      .map(
-        (item) => `
-          <div class="list-row">
-            <div>
-              <strong>${escapeHtml(item.name)}</strong>
-              <div class="muted">${currency(Number(item.salePrice || 0))}</div>
-            </div>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <button class="btn btn-secondary" type="button" data-cart-decrease="${escapeHtml(item.id)}">−</button>
-              <strong>${Number(item.quantity || 0)}</strong>
-              <button class="btn btn-secondary" type="button" data-cart-increase="${escapeHtml(item.id)}">+</button>
-              <button class="btn btn-danger" type="button" data-cart-remove="${escapeHtml(item.id)}">Remover</button>
-            </div>
-          </div>
-        `
-      )
-      .join('');
+    cartEl.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Unit.</th>
+              <th>Qtd</th>
+              <th>Total</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.cart.map((item) => `
+              <tr>
+                <td>
+                  <strong>${escapeHtml(item.name)}</strong>
+                </td>
+                <td>${currency(Number(item.salePrice || 0))}</td>
+                <td>${Number(item.quantity || 0)}</td>
+                <td>${currency(Number(item.salePrice || 0) * Number(item.quantity || 0))}</td>
+                <td>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn btn-secondary" type="button" data-cart-decrease="${escapeHtml(item.id)}">−</button>
+                    <button class="btn btn-secondary" type="button" data-cart-increase="${escapeHtml(item.id)}">+</button>
+                    <button class="btn btn-danger" type="button" data-cart-remove="${escapeHtml(item.id)}">Remover</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
 
     cartEl.querySelectorAll('[data-cart-decrease]').forEach((btn) => {
       btn.addEventListener('click', () => changeCartQuantity(btn.dataset.cartDecrease, -1));
@@ -611,9 +635,36 @@ export function createSalesModule(ctx) {
     document.addEventListener('keydown', (event) => {
       if (!tabEls.sales?.classList.contains('active')) return;
 
+      const modalOpen = Boolean(document.querySelector('#modal-root .modal-backdrop'));
+      if (modalOpen) return;
+
       if (event.key === 'F2') {
         event.preventDefault();
         focusSearchInput();
+        return;
+      }
+
+      if (event.key === 'F3') {
+        event.preventDefault();
+        tabEls.sales.querySelector('#sale-select-client-btn')?.click();
+        return;
+      }
+
+      if (event.key === 'F4') {
+        event.preventDefault();
+        tabEls.sales.querySelector('#sale-clear-client-btn')?.click();
+        return;
+      }
+
+      if (event.key === 'F8') {
+        event.preventDefault();
+        tabEls.sales.querySelector('#finish-sale-btn')?.click();
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        tabEls.sales.querySelector('#clear-cart-btn')?.click();
       }
     });
   }
@@ -1351,93 +1402,140 @@ export function createSalesModule(ctx) {
     const { subtotal, discount, total, change } = calculateCartTotal();
 
     tabEls.sales.innerHTML = `
-      <div class="section-stack">
-        <div class="sales-layout">
-          <div class="panel">
-            <div class="section-header">
-              <h2>Venda</h2>
-              <span class="muted">Pesquisa de produto e código de barras</span>
+      <div class="section-stack sales-modern-layout">
+        <div class="panel">
+          <div class="section-header">
+            <div>
+              <h2>Vendas</h2>
+              <span class="muted">Fluxo rápido para operador de caixa</span>
             </div>
-
-            <div class="sales-search-toolbar" style="margin-bottom:14px;">
-              <div class="sales-search-main">
-                <input
-                  id="sale-product-search"
-                  type="text"
-                  placeholder="Digite nome do produto ou código de barras"
-                  autocomplete="off"
-                  value="${escapeHtml(searchTerm)}"
-                />
-              </div>
-
-              <div class="sales-search-actions">
-                <button class="btn btn-secondary" type="button" id="sale-select-client-btn">Selecionar cliente</button>
-                <button class="btn btn-secondary" type="button" id="sale-clear-client-btn">Limpar cliente</button>
-              </div>
-            </div>
-
-            <div class="form-grid" style="margin-bottom:14px;">
-              <label style="grid-column:1 / -1;">
-                Cliente
-                <input id="sale-customer-name" type="text" value="" placeholder="Deixe em branco para cliente não identificado" />
-              </label>
-
-              <label style="grid-column:1 / -1; display:flex; align-items:center; gap:8px;">
-                <input id="sale-include-cpf" type="checkbox" style="width:auto;" />
-                <span>Inserir CPF no cupom</span>
-              </label>
-
-              <label id="sale-cpf-wrap" style="grid-column:1 / -1; display:none;">
-                CPF
-                <input id="sale-customer-cpf" type="text" placeholder="Digite o CPF do cliente" />
-              </label>
-            </div>
-
-            <div id="sale-search-results"></div>
+            <div class="badge">${(state.cart || []).length} item(ns)</div>
           </div>
 
-          <div class="panel">
-            <div class="section-header">
-              <h2>Carrinho</h2>
-              <span class="muted"><span id="sale-items-count">${state.cart.length}</span> item(ns)</span>
+          <div class="form-grid" style="margin-top:12px;">
+            <label style="grid-column: span 2;">
+              Cliente
+              <input id="sale-customer-name" type="text" value="" placeholder="Deixe em branco para cliente não identificado" />
+            </label>
+
+            <label style="display:flex; align-items:center; gap:8px; align-self:end;">
+              <input id="sale-include-cpf" type="checkbox" style="width:auto;" />
+              <span>Inserir CPF no cupom</span>
+            </label>
+
+            <label id="sale-cpf-wrap" style="display:none;">
+              CPF
+              <input id="sale-customer-cpf" type="text" placeholder="Digite o CPF do cliente" />
+            </label>
+
+            <label>
+              Forma de pagamento
+              <select id="sale-payment-method">
+                ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+
+          <div class="form-actions" style="margin-top:12px;">
+            <button class="btn btn-secondary" type="button" id="sale-select-client-btn">Selecionar cliente</button>
+            <button class="btn btn-secondary" type="button" id="sale-clear-client-btn">Limpar cliente</button>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:minmax(0, 1.65fr) minmax(320px, 0.95fr); gap:16px; align-items:start;">
+          <div class="section-stack">
+            <div class="panel">
+              <div class="section-header">
+                <div>
+                  <h3>Adicionar produtos</h3>
+                  <span class="muted">Use nome ou código de barras</span>
+                </div>
+                <span class="muted">Atalho: F2</span>
+              </div>
+
+              <div class="sales-search-toolbar" style="margin-top:12px;">
+                <div class="sales-search-main">
+                  <input
+                    id="sale-product-search"
+                    type="text"
+                    placeholder="Digite nome do produto ou código de barras"
+                    autocomplete="off"
+                    value="${escapeHtml(searchTerm)}"
+                  />
+                </div>
+              </div>
+
+              <div id="sale-search-results" style="margin-top:12px;"></div>
             </div>
 
-            <div id="sale-cart-items"></div>
+            <div class="panel">
+              <div class="section-header">
+                <div>
+                  <h3>Carrinho</h3>
+                  <span class="muted">Itens adicionados à venda</span>
+                </div>
+                <span class="muted"><span id="sale-items-count">${state.cart.length}</span> item(ns)</span>
+              </div>
 
-            <div class="form-grid" style="margin-top:14px;">
-              <label>
-                Forma de pagamento
-                <select id="sale-payment-method">
-                  ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
-                </select>
-              </label>
+              <div id="sale-cart-items" style="margin-top:12px;"></div>
+            </div>
+          </div>
 
-              <label>
-                Desconto
-                <input name="discount" type="number" step="0.01" min="0" value="0" />
-              </label>
+          <div class="section-stack">
+            <div class="panel">
+              <div class="section-header">
+                <div>
+                  <h3>Resumo da venda</h3>
+                  <span class="muted">Valores e fechamento</span>
+                </div>
+              </div>
 
-              <label>
-                Valor pago
-                <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
-              </label>
+              <div class="form-grid" style="margin-top:12px;">
+                <label>
+                  Desconto
+                  <input name="discount" type="number" step="0.01" min="0" value="0" />
+                </label>
 
-              <label style="grid-column:1 / -1;">
-                Observações
-                <textarea name="notes"></textarea>
-              </label>
+                <label>
+                  Valor pago
+                  <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
+                </label>
+
+                <label style="grid-column:1 / -1;">
+                  Observações
+                  <textarea name="notes" placeholder="Observações da venda"></textarea>
+                </label>
+              </div>
+
+              <div class="summary-box" style="margin-top:14px;">
+                <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
+                <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
+                <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
+                <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
+              </div>
+
+              <div class="form-actions" style="margin-top:14px; display:grid; grid-template-columns:1fr; gap:10px;">
+                <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
+                <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
+              </div>
             </div>
 
-            <div class="summary-box" style="margin-top:14px;">
-              <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
-              <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
-              <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
-              <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
-            </div>
+            <div class="panel">
+              <div class="section-header">
+                <div>
+                  <h3>Atalhos do teclado</h3>
+                  <span class="muted">Ajuda rápida para o operador</span>
+                </div>
+              </div>
 
-            <div class="form-actions" style="margin-top:14px;">
-              <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
-              <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
+              <div style="display:grid; gap:8px; margin-top:12px;">
+                <div class="list-row"><strong>F2</strong><span>Focar busca de produto</span></div>
+                <div class="list-row"><strong>F3</strong><span>Selecionar cliente</span></div>
+                <div class="list-row"><strong>F4</strong><span>Limpar cliente</span></div>
+                <div class="list-row"><strong>F8</strong><span>Finalizar venda</span></div>
+                <div class="list-row"><strong>ESC</strong><span>Limpar carrinho</span></div>
+                <div class="list-row"><strong>ENTER</strong><span>Adicionar produto pelo código digitado</span></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1575,6 +1673,7 @@ export function createSalesModule(ctx) {
     updateSaleSummary();
     bindCpfToggle();
     bindKeyboardShortcuts();
+    focusSearchInput();
   }
 
   return {
