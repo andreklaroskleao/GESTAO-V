@@ -230,9 +230,9 @@ export function createSalesModule(ctx) {
 
     if (!term) {
       resultsEl.innerHTML = `
-        <div class="empty-state">
+        <div class="empty-state" style="padding:14px 16px;">
           <strong>Pesquise um produto</strong>
-          <span>Digite nome ou código de barras para listar resultados.</span>
+          <span>Digite nome ou código de barras.</span>
         </div>
       `;
       return;
@@ -245,7 +245,7 @@ export function createSalesModule(ctx) {
           .toLowerCase()
           .includes(term)
       )
-      .slice(0, 10);
+      .slice(0, 8);
 
     resultsEl.innerHTML =
       results
@@ -264,7 +264,7 @@ export function createSalesModule(ctx) {
         )
         .join('') ||
       `
-        <div class="empty-state">
+        <div class="empty-state" style="padding:14px 16px;">
           <strong>Nenhum produto encontrado</strong>
           <span>Refine sua pesquisa.</span>
         </div>
@@ -281,9 +281,9 @@ export function createSalesModule(ctx) {
 
     if (!(state.cart || []).length) {
       cartEl.innerHTML = `
-        <div class="empty-state">
+        <div class="empty-state" style="padding:14px 16px;">
           <strong>Carrinho vazio</strong>
-          <span>Pesquise um produto para adicionar.</span>
+          <span>Adicione produtos à venda.</span>
         </div>
       `;
       return;
@@ -526,20 +526,20 @@ export function createSalesModule(ctx) {
     if (searchInput) searchInput.value = '';
 
     const customerInput = tabEls.sales.querySelector('#sale-customer-name');
-    const paymentInput = tabEls.sales.querySelector('#sale-payment-method');
     const discountInput = tabEls.sales.querySelector('input[name="discount"]');
     const amountPaidInput = tabEls.sales.querySelector('input[name="amountPaid"]');
     const notesInput = tabEls.sales.querySelector('textarea[name="notes"]');
     const cpfCheck = tabEls.sales.querySelector('#sale-include-cpf');
     const cpfInput = tabEls.sales.querySelector('#sale-customer-cpf');
+    const paymentInput = tabEls.sales.querySelector('#sale-payment-method');
 
     if (customerInput) customerInput.value = '';
-    if (paymentInput) paymentInput.value = paymentMethods?.[0] || 'Dinheiro';
     if (discountInput) discountInput.value = '0';
     if (amountPaidInput) amountPaidInput.value = '0';
     if (notesInput) notesInput.value = '';
     if (cpfCheck) cpfCheck.checked = false;
     if (cpfInput) cpfInput.value = '';
+    if (paymentInput) paymentInput.value = paymentMethods?.[0] || 'Dinheiro';
 
     render();
     focusSearchInput();
@@ -573,7 +573,6 @@ export function createSalesModule(ctx) {
       }
 
       const items = buildSaleItemsPayload(state.cart);
-
       const saleCreatedAt = new Date();
       const saleDateTimeLabel = saleCreatedAt.toLocaleString('pt-BR');
 
@@ -651,6 +650,12 @@ export function createSalesModule(ctx) {
       if (event.key === 'F4') {
         event.preventDefault();
         tabEls.sales.querySelector('#sale-clear-client-btn')?.click();
+        return;
+      }
+
+      if (event.key === 'F7') {
+        event.preventDefault();
+        tabEls.sales.querySelector('#sale-open-history-btn')?.click();
         return;
       }
 
@@ -793,7 +798,6 @@ export function createSalesModule(ctx) {
     });
 
     showToast('Venda excluída com sucesso.', 'success');
-    renderHistory();
   }
 
   function calculateDraftTotals(draft, formData) {
@@ -1093,7 +1097,6 @@ export function createSalesModule(ctx) {
 
       closeModal();
       showToast('Venda atualizada com sucesso.', 'success');
-      renderHistory();
     }
 
     modalRoot.innerHTML = `
@@ -1301,11 +1304,8 @@ export function createSalesModule(ctx) {
     renderDraftSummary();
   }
 
-  function renderHistory() {
-    const historyEl = tabEls.sales.querySelector('#sales-history-table');
-    if (!historyEl) return;
-
-    const rows = (state.sales || []).filter((sale) => {
+  function getFilteredSales() {
+    return (state.sales || []).filter((sale) => {
       if (sale.deleted === true) return false;
 
       const customer = String(sale.customerName || '').toLowerCase();
@@ -1322,30 +1322,35 @@ export function createSalesModule(ctx) {
         (!saleFilters.dateTo || !createdKey || createdKey <= saleFilters.dateTo)
       );
     });
+  }
 
-    historyEl.innerHTML =
-      rows
-        .map(
-          (sale) => `
-            <tr>
-              <td>${escapeHtml(formatDateTime(sale.createdAt))}</td>
-              <td>${escapeHtml(normalizeCustomerName(sale.customerName))}</td>
-              <td>${escapeHtml(sale.paymentMethod || '-')}</td>
-              <td>${currency(sale.total || 0)}</td>
-              <td>${Array.isArray(sale.items) ? sale.items.length : 0}</td>
-              <td>
-                <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                  <button class="btn btn-secondary" type="button" data-print-sale="${escapeHtml(sale.id)}">Imprimir</button>
-                  <button class="btn btn-secondary" type="button" data-edit-sale="${escapeHtml(sale.id)}">Editar</button>
-                  <button class="btn btn-danger" type="button" data-delete-sale="${escapeHtml(sale.id)}">Excluir</button>
-                </div>
-              </td>
-            </tr>
-          `
-        )
-        .join('') || '<tr><td colspan="6">Nenhuma venda encontrada.</td></tr>';
+  function buildHistoryRows() {
+    const rows = getFilteredSales();
 
-    historyEl.querySelectorAll('[data-print-sale]').forEach((btn) => {
+    return rows
+      .map(
+        (sale) => `
+          <tr>
+            <td>${escapeHtml(formatDateTime(sale.createdAt))}</td>
+            <td>${escapeHtml(normalizeCustomerName(sale.customerName))}</td>
+            <td>${escapeHtml(sale.paymentMethod || '-')}</td>
+            <td>${currency(sale.total || 0)}</td>
+            <td>${Array.isArray(sale.items) ? sale.items.length : 0}</td>
+            <td>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="btn btn-secondary" type="button" data-print-sale="${escapeHtml(sale.id)}">Imprimir</button>
+                <button class="btn btn-secondary" type="button" data-edit-sale="${escapeHtml(sale.id)}">Editar</button>
+                <button class="btn btn-danger" type="button" data-delete-sale="${escapeHtml(sale.id)}">Excluir</button>
+              </div>
+            </td>
+          </tr>
+        `
+      )
+      .join('') || '<tr><td colspan="6">Nenhuma venda encontrada.</td></tr>';
+  }
+
+  function bindHistoryActions(scopeEl) {
+    scopeEl.querySelectorAll('[data-print-sale]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const sale = (state.sales || []).find((item) => item.id === btn.dataset.printSale);
         if (!sale) return;
@@ -1353,7 +1358,7 @@ export function createSalesModule(ctx) {
       });
     });
 
-    historyEl.querySelectorAll('[data-edit-sale]').forEach((btn) => {
+    scopeEl.querySelectorAll('[data-edit-sale]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const sale = (state.sales || []).find((item) => item.id === btn.dataset.editSale);
         if (!sale) return;
@@ -1361,7 +1366,7 @@ export function createSalesModule(ctx) {
       });
     });
 
-    historyEl.querySelectorAll('[data-delete-sale]').forEach((btn) => {
+    scopeEl.querySelectorAll('[data-delete-sale]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const sale = (state.sales || []).find((item) => item.id === btn.dataset.deleteSale);
         if (!sale) return;
@@ -1373,10 +1378,99 @@ export function createSalesModule(ctx) {
           placeholder: 'Descreva o motivo da exclusão',
           onConfirm: async (reason) => {
             await deleteSale(sale.id, reason);
+            const historyTable = document.querySelector('#sales-history-modal-table');
+            if (historyTable) {
+              historyTable.innerHTML = buildHistoryRows();
+              bindHistoryActions(historyTable.closest('.modal-card') || historyTable.parentElement);
+            }
           }
         });
       });
     });
+  }
+
+  function openHistoryModal() {
+    const modalRoot = document.getElementById('modal-root');
+    if (!modalRoot) return;
+
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop" id="sales-history-modal-backdrop">
+        <div class="modal-card sales-history-modal-card" style="width:min(1100px, calc(100vw - 24px)); max-width:min(1100px, calc(100vw - 24px));">
+          <div class="section-header">
+            <div>
+              <h2>Histórico de vendas</h2>
+              <span class="muted">Filtros, impressão, edição e exclusão</span>
+            </div>
+            <button class="btn btn-secondary" type="button" id="sales-history-modal-close">Fechar</button>
+          </div>
+
+          <div class="search-row sales-history-filters" style="margin-bottom:14px;">
+            <input id="sales-filter-customer" placeholder="Cliente" value="${escapeHtml(saleFilters.customer)}" />
+            <select id="sales-filter-payment">
+              <option value="">Todas as formas</option>
+              ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}" ${saleFilters.paymentMethod === method ? 'selected' : ''}>${escapeHtml(method)}</option>`).join('')}
+            </select>
+            <input id="sales-filter-date-from" type="date" value="${saleFilters.dateFrom}" />
+            <input id="sales-filter-date-to" type="date" value="${saleFilters.dateTo}" />
+            <button class="btn btn-secondary" type="button" id="sales-filter-apply">Filtrar</button>
+            <button class="btn btn-secondary" type="button" id="sales-filter-clear">Limpar</button>
+          </div>
+
+          <div class="table-wrap scroll-dual">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Cliente</th>
+                  <th>Pagamento</th>
+                  <th>Total</th>
+                  <th>Itens</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="sales-history-modal-table">${buildHistoryRows()}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const closeModal = () => {
+      modalRoot.innerHTML = '';
+    };
+
+    const modalCard = modalRoot.querySelector('.sales-history-modal-card');
+    const table = modalRoot.querySelector('#sales-history-modal-table');
+
+    modalRoot.querySelector('#sales-history-modal-close')?.addEventListener('click', closeModal);
+    modalRoot.querySelector('#sales-history-modal-backdrop')?.addEventListener('click', (event) => {
+      if (event.target.id === 'sales-history-modal-backdrop') closeModal();
+    });
+
+    bindHistoryActions(modalCard);
+
+    modalRoot.querySelector('#sales-filter-apply')?.addEventListener('click', () => {
+      saleFilters.customer = modalRoot.querySelector('#sales-filter-customer')?.value || '';
+      saleFilters.paymentMethod = modalRoot.querySelector('#sales-filter-payment')?.value || '';
+      saleFilters.dateFrom = modalRoot.querySelector('#sales-filter-date-from')?.value || '';
+      saleFilters.dateTo = modalRoot.querySelector('#sales-filter-date-to')?.value || '';
+      table.innerHTML = buildHistoryRows();
+      bindHistoryActions(modalCard);
+    });
+
+    bindAsyncButton(
+      modalRoot.querySelector('#sales-filter-clear'),
+      async () => {
+        saleFilters = { customer: '', paymentMethod: '', dateFrom: '', dateTo: '' };
+        modalRoot.querySelector('#sales-filter-customer').value = '';
+        modalRoot.querySelector('#sales-filter-payment').value = '';
+        modalRoot.querySelector('#sales-filter-date-from').value = '';
+        modalRoot.querySelector('#sales-filter-date-to').value = '';
+        table.innerHTML = buildHistoryRows();
+        bindHistoryActions(modalCard);
+      },
+      { busyLabel: 'Limpando...' }
+    );
   }
 
   function bindCpfToggle() {
@@ -1407,7 +1501,10 @@ export function createSalesModule(ctx) {
               <h2>Vendas</h2>
               <span class="muted">Fluxo rápido para operador de caixa</span>
             </div>
-            <div class="badge">${(state.cart || []).length} item(ns)</div>
+            <div class="form-actions">
+              <div class="badge">${(state.cart || []).length} item(ns)</div>
+              <button class="btn btn-secondary" type="button" id="sale-open-history-btn">Histórico de vendas</button>
+            </div>
           </div>
 
           <div class="form-grid" style="margin-top:12px;">
@@ -1425,13 +1522,6 @@ export function createSalesModule(ctx) {
               CPF
               <input id="sale-customer-cpf" type="text" placeholder="Digite o CPF do cliente" />
             </label>
-
-            <label>
-              Forma de pagamento
-              <select id="sale-payment-method">
-                ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
-              </select>
-            </label>
           </div>
 
           <div class="form-actions" style="margin-top:12px;">
@@ -1440,153 +1530,122 @@ export function createSalesModule(ctx) {
           </div>
         </div>
 
-        <div class="sales-main-grid">
-          <div class="section-stack">
-            <div class="panel">
-              <div class="section-header">
-                <div>
-                  <h3>Adicionar produtos</h3>
-                  <span class="muted">Use nome ou código de barras</span>
-                </div>
-                <span class="muted">Atalho: F2</span>
+        <div class="sales-main-grid" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(300px,0.9fr);">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h3>Adicionar produtos</h3>
+                <span class="muted">Use nome ou código de barras</span>
               </div>
-
-              <div class="sales-search-toolbar" style="margin-top:12px;">
-                <div class="sales-search-main">
-                  <input
-                    id="sale-product-search"
-                    type="text"
-                    placeholder="Digite nome do produto ou código de barras"
-                    autocomplete="off"
-                    value="${escapeHtml(searchTerm)}"
-                  />
-                </div>
-              </div>
-
-              <div id="sale-search-results" style="margin-top:12px;"></div>
+              <span class="muted">Atalho: F2</span>
             </div>
 
-            <div class="panel">
-              <div class="section-header">
-                <div>
-                  <h3>Carrinho</h3>
-                  <span class="muted">Itens adicionados à venda</span>
-                </div>
-                <span class="muted"><span id="sale-items-count">${state.cart.length}</span> item(ns)</span>
+            <div class="sales-search-toolbar" style="margin-top:12px;">
+              <div class="sales-search-main">
+                <input
+                  id="sale-product-search"
+                  type="text"
+                  placeholder="Digite nome do produto ou código de barras"
+                  autocomplete="off"
+                  value="${escapeHtml(searchTerm)}"
+                />
               </div>
-
-              <div id="sale-cart-items" style="margin-top:12px;"></div>
             </div>
+
+            <div id="sale-search-results" class="panel-scroll" style="margin-top:12px; max-height:260px;"></div>
           </div>
 
-          <div class="section-stack">
-            <div class="panel cash-highlight">
-              <div class="section-header">
-                <div>
-                  <h3>Resumo da venda</h3>
-                  <span class="muted">Valores e fechamento</span>
-                </div>
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h3>Carrinho</h3>
+                <span class="muted">Itens adicionados à venda</span>
               </div>
+              <span class="muted"><span id="sale-items-count">${state.cart.length}</span> item(ns)</span>
+            </div>
 
-              <div class="form-grid" style="margin-top:12px;">
-                <label>
-                  Desconto
-                  <input name="discount" type="number" step="0.01" min="0" value="0" />
-                </label>
+            <div id="sale-cart-items" class="panel-scroll" style="margin-top:12px; max-height:340px;"></div>
+          </div>
 
-                <label>
-                  Valor pago
-                  <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
-                </label>
-
-                <label style="grid-column:1 / -1;">
-                  Observações
-                  <textarea name="notes" placeholder="Observações da venda"></textarea>
-                </label>
-              </div>
-
-              <div class="summary-box" style="margin-top:14px;">
-                <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
-                <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
-                <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
-                <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
-              </div>
-
-              <div class="form-actions" style="margin-top:14px; display:grid; grid-template-columns:1fr; gap:10px;">
-                <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
-                <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
+          <div class="panel cash-highlight">
+            <div class="section-header">
+              <div>
+                <h3>Resumo da venda</h3>
+                <span class="muted">Valores e fechamento</span>
               </div>
             </div>
 
-            <div class="panel">
-              <div class="section-header">
-                <div>
-                  <h3>Atalhos do teclado</h3>
-                  <span class="muted">Ajuda rápida para o operador</span>
-                </div>
-              </div>
+            <div class="form-grid" style="margin-top:12px; grid-template-columns:1fr 1fr;">
+              <label style="grid-column:1 / -1;">
+                Forma de pagamento
+                <select id="sale-payment-method">
+                  ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
+                </select>
+              </label>
 
-              <div class="shortcut-card" style="margin-top:12px;">
-                <div class="shortcut-row">
-                  <span class="shortcut-key">F2</span>
-                  <span class="shortcut-label">Focar busca de produto</span>
-                </div>
-                <div class="shortcut-row">
-                  <span class="shortcut-key">F3</span>
-                  <span class="shortcut-label">Selecionar cliente</span>
-                </div>
-                <div class="shortcut-row">
-                  <span class="shortcut-key">F4</span>
-                  <span class="shortcut-label">Limpar cliente</span>
-                </div>
-                <div class="shortcut-row">
-                  <span class="shortcut-key">F8</span>
-                  <span class="shortcut-label">Finalizar venda</span>
-                </div>
-                <div class="shortcut-row">
-                  <span class="shortcut-key">ESC</span>
-                  <span class="shortcut-label">Limpar carrinho</span>
-                </div>
-                <div class="shortcut-row">
-                  <span class="shortcut-key">ENTER</span>
-                  <span class="shortcut-label">Adicionar produto pelo código digitado</span>
-                </div>
-              </div>
+              <label>
+                Desconto
+                <input name="discount" type="number" step="0.01" min="0" value="0" />
+              </label>
+
+              <label>
+                Valor pago
+                <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
+              </label>
+
+              <label style="grid-column:1 / -1;">
+                Observações
+                <textarea name="notes" placeholder="Observações da venda"></textarea>
+              </label>
+            </div>
+
+            <div class="summary-box" style="margin-top:14px;">
+              <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
+              <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
+              <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
+              <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
+            </div>
+
+            <div class="form-actions" style="margin-top:14px; display:grid; grid-template-columns:1fr; gap:10px;">
+              <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
+              <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
             </div>
           </div>
         </div>
 
-        <div class="table-card">
+        <div class="panel">
           <div class="section-header">
-            <h2>Histórico de vendas</h2>
+            <div>
+              <h3>Atalhos do teclado</h3>
+              <span class="muted">Ajuda rápida para o operador</span>
+            </div>
           </div>
 
-          <div class="search-row sales-history-filters" style="margin-bottom:14px;">
-            <input id="sales-filter-customer" placeholder="Cliente" value="${escapeHtml(saleFilters.customer)}" />
-            <select id="sales-filter-payment">
-              <option value="">Todas as formas</option>
-              ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}" ${saleFilters.paymentMethod === method ? 'selected' : ''}>${escapeHtml(method)}</option>`).join('')}
-            </select>
-            <input id="sales-filter-date-from" type="date" value="${saleFilters.dateFrom}" />
-            <input id="sales-filter-date-to" type="date" value="${saleFilters.dateTo}" />
-            <button class="btn btn-secondary" type="button" id="sales-filter-apply">Filtrar</button>
-            <button class="btn btn-secondary" type="button" id="sales-filter-clear">Limpar</button>
-          </div>
-
-          <div class="table-wrap scroll-dual">
-            <table>
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Cliente</th>
-                  <th>Pagamento</th>
-                  <th>Total</th>
-                  <th>Itens</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody id="sales-history-table"></tbody>
-            </table>
+          <div class="shortcut-card" style="margin-top:12px; grid-template-columns:repeat(6, minmax(0,1fr));">
+            <div class="shortcut-row">
+              <span class="shortcut-key">F2</span>
+              <span class="shortcut-label">Buscar produto</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-key">F3</span>
+              <span class="shortcut-label">Selecionar cliente</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-key">F4</span>
+              <span class="shortcut-label">Limpar cliente</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-key">F7</span>
+              <span class="shortcut-label">Abrir histórico</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-key">F8</span>
+              <span class="shortcut-label">Finalizar venda</span>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-key">ESC</span>
+              <span class="shortcut-label">Limpar carrinho</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1646,6 +1705,14 @@ export function createSalesModule(ctx) {
       { busyLabel: 'Limpando...' }
     );
 
+    bindAsyncButton(
+      tabEls.sales.querySelector('#sale-open-history-btn'),
+      async () => {
+        openHistoryModal();
+      },
+      { busyLabel: 'Abrindo...' }
+    );
+
     tabEls.sales.querySelector('#sale-payment-method')?.addEventListener('change', updateSaleSummary);
     tabEls.sales.querySelector('input[name="discount"]')?.addEventListener('input', updateSaleSummary);
     tabEls.sales.querySelector('input[name="amountPaid"]')?.addEventListener('input', updateSaleSummary);
@@ -1666,26 +1733,8 @@ export function createSalesModule(ctx) {
       { busyLabel: 'Limpando...' }
     );
 
-    tabEls.sales.querySelector('#sales-filter-apply')?.addEventListener('click', () => {
-      saleFilters.customer = tabEls.sales.querySelector('#sales-filter-customer')?.value || '';
-      saleFilters.paymentMethod = tabEls.sales.querySelector('#sales-filter-payment')?.value || '';
-      saleFilters.dateFrom = tabEls.sales.querySelector('#sales-filter-date-from')?.value || '';
-      saleFilters.dateTo = tabEls.sales.querySelector('#sales-filter-date-to')?.value || '';
-      renderHistory();
-    });
-
-    bindAsyncButton(
-      tabEls.sales.querySelector('#sales-filter-clear'),
-      async () => {
-        saleFilters = { customer: '', paymentMethod: '', dateFrom: '', dateTo: '' };
-        render();
-      },
-      { busyLabel: 'Limpando...' }
-    );
-
     renderSearchResults();
     renderCart();
-    renderHistory();
     updateSaleSummary();
     bindCpfToggle();
     bindKeyboardShortcuts();
