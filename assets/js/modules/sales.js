@@ -117,14 +117,16 @@ export function createSalesModule(ctx) {
 
   function normalizeSaleItemsForEdition(items) {
     if (!Array.isArray(items)) return [];
-    return items.map((item) => ({
-      id: item.productId || item.id || '',
-      productId: item.productId || item.id || '',
-      name: item.name || '',
-      salePrice: Number(item.unitPrice || item.salePrice || 0),
-      quantity: Number(item.quantity || 0),
-      barcode: item.barcode || ''
-    })).filter((item) => item.id && item.quantity > 0);
+    return items
+      .map((item) => ({
+        id: item.productId || item.id || '',
+        productId: item.productId || item.id || '',
+        name: item.name || '',
+        salePrice: Number(item.unitPrice || item.salePrice || 0),
+        quantity: Number(item.quantity || 0),
+        barcode: item.barcode || ''
+      }))
+      .filter((item) => item.id && item.quantity > 0);
   }
 
   function normalizeSaleForPrint(sale) {
@@ -230,7 +232,7 @@ export function createSalesModule(ctx) {
 
     if (!term) {
       resultsEl.innerHTML = `
-        <div class="empty-state" style="padding:14px 16px;">
+        <div class="empty-state sale-compact-empty">
           <strong>Pesquise um produto</strong>
           <span>Digite nome ou código de barras.</span>
         </div>
@@ -251,7 +253,7 @@ export function createSalesModule(ctx) {
       results
         .map(
           (product) => `
-            <div class="list-row">
+            <div class="list-row sale-result-row">
               <div>
                 <strong>${escapeHtml(product.name)}</strong>
                 <div class="muted">
@@ -264,7 +266,7 @@ export function createSalesModule(ctx) {
         )
         .join('') ||
       `
-        <div class="empty-state" style="padding:14px 16px;">
+        <div class="empty-state sale-compact-empty">
           <strong>Nenhum produto encontrado</strong>
           <span>Refine sua pesquisa.</span>
         </div>
@@ -281,7 +283,7 @@ export function createSalesModule(ctx) {
 
     if (!(state.cart || []).length) {
       cartEl.innerHTML = `
-        <div class="empty-state" style="padding:14px 16px;">
+        <div class="empty-state sale-compact-empty">
           <strong>Carrinho vazio</strong>
           <span>Adicione produtos à venda.</span>
         </div>
@@ -821,7 +823,10 @@ export function createSalesModule(ctx) {
     const originalMap = buildItemMap(originalItems);
 
     const draft = {
-      customerName: String(sale.customerName || '').trim() === UNIDENTIFIED_CUSTOMER ? '' : String(sale.customerName || '').trim(),
+      customerName:
+        String(sale.customerName || '').trim() === UNIDENTIFIED_CUSTOMER
+          ? ''
+          : String(sale.customerName || '').trim(),
       includeCpf: Boolean(String(sale.customerCpf || '').trim()),
       customerCpf: String(sale.customerCpf || '').trim(),
       paymentMethod: sale.paymentMethod || paymentMethods?.[0] || 'Dinheiro',
@@ -915,22 +920,24 @@ export function createSalesModule(ctx) {
       }
 
       host.innerHTML = draft.items
-        .map((item) => `
-          <div class="list-row">
-            <div>
-              <strong>${escapeHtml(item.name)}</strong>
-              <div class="muted">
-                ${currency(item.salePrice || 0)} · Disponível para edição: ${getEditableAvailableStock(item.id)}
+        .map(
+          (item) => `
+            <div class="list-row">
+              <div>
+                <strong>${escapeHtml(item.name)}</strong>
+                <div class="muted">
+                  ${currency(item.salePrice || 0)} · Disponível para edição: ${getEditableAvailableStock(item.id)}
+                </div>
+              </div>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <button class="btn btn-secondary" type="button" data-edit-cart-decrease="${escapeHtml(item.id)}">−</button>
+                <strong>${Number(item.quantity || 0)}</strong>
+                <button class="btn btn-secondary" type="button" data-edit-cart-increase="${escapeHtml(item.id)}">+</button>
+                <button class="btn btn-danger" type="button" data-edit-cart-remove="${escapeHtml(item.id)}">Remover</button>
               </div>
             </div>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <button class="btn btn-secondary" type="button" data-edit-cart-decrease="${escapeHtml(item.id)}">−</button>
-              <strong>${Number(item.quantity || 0)}</strong>
-              <button class="btn btn-secondary" type="button" data-edit-cart-increase="${escapeHtml(item.id)}">+</button>
-              <button class="btn btn-danger" type="button" data-edit-cart-remove="${escapeHtml(item.id)}">Remover</button>
-            </div>
-          </div>
-        `)
+          `
+        )
         .join('');
 
       host.querySelectorAll('[data-edit-cart-decrease]').forEach((btn) => {
@@ -1327,26 +1334,24 @@ export function createSalesModule(ctx) {
   function buildHistoryRows() {
     const rows = getFilteredSales();
 
-    return rows
-      .map(
-        (sale) => `
-          <tr>
-            <td>${escapeHtml(formatDateTime(sale.createdAt))}</td>
-            <td>${escapeHtml(normalizeCustomerName(sale.customerName))}</td>
-            <td>${escapeHtml(sale.paymentMethod || '-')}</td>
-            <td>${currency(sale.total || 0)}</td>
-            <td>${Array.isArray(sale.items) ? sale.items.length : 0}</td>
-            <td>
-              <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                <button class="btn btn-secondary" type="button" data-print-sale="${escapeHtml(sale.id)}">Imprimir</button>
-                <button class="btn btn-secondary" type="button" data-edit-sale="${escapeHtml(sale.id)}">Editar</button>
-                <button class="btn btn-danger" type="button" data-delete-sale="${escapeHtml(sale.id)}">Excluir</button>
-              </div>
-            </td>
-          </tr>
-        `
-      )
-      .join('') || '<tr><td colspan="6">Nenhuma venda encontrada.</td></tr>';
+    return (
+      rows.map((sale) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(sale.createdAt))}</td>
+          <td>${escapeHtml(normalizeCustomerName(sale.customerName))}</td>
+          <td>${escapeHtml(sale.paymentMethod || '-')}</td>
+          <td>${currency(sale.total || 0)}</td>
+          <td>${Array.isArray(sale.items) ? sale.items.length : 0}</td>
+          <td>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn btn-secondary" type="button" data-print-sale="${escapeHtml(sale.id)}">Imprimir</button>
+              <button class="btn btn-secondary" type="button" data-edit-sale="${escapeHtml(sale.id)}">Editar</button>
+              <button class="btn btn-danger" type="button" data-delete-sale="${escapeHtml(sale.id)}">Excluir</button>
+            </div>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="6">Nenhuma venda encontrada.</td></tr>'
+    );
   }
 
   function bindHistoryActions(scopeEl) {
@@ -1494,80 +1499,46 @@ export function createSalesModule(ctx) {
     const { subtotal, discount, total, change } = calculateCartTotal();
 
     tabEls.sales.innerHTML = `
-      <div class="section-stack sales-modern-layout">
-        <div class="panel">
-          <div class="section-header">
-            <div>
-              <h2>Vendas</h2>
-              <span class="muted">Fluxo rápido para operador de caixa</span>
-            </div>
-            <div class="form-actions">
-              <div class="badge">${(state.cart || []).length} item(ns)</div>
-              <button class="btn btn-secondary" type="button" id="sale-open-history-btn">Histórico de vendas</button>
-            </div>
-          </div>
-
-          <div class="form-grid" style="margin-top:12px;">
-            <label style="grid-column: span 2;">
-              Cliente
-              <input id="sale-customer-name" type="text" value="" placeholder="Deixe em branco para cliente não identificado" />
-            </label>
-
-            <label style="display:flex; align-items:center; gap:8px; align-self:end;">
-              <input id="sale-include-cpf" type="checkbox" style="width:auto;" />
-              <span>Inserir CPF no cupom</span>
-            </label>
-
-            <label id="sale-cpf-wrap" style="display:none;">
-              CPF
-              <input id="sale-customer-cpf" type="text" placeholder="Digite o CPF do cliente" />
-            </label>
-          </div>
-
-          <div class="form-actions" style="margin-top:12px;">
-            <button class="btn btn-secondary" type="button" id="sale-select-client-btn">Selecionar cliente</button>
-            <button class="btn btn-secondary" type="button" id="sale-clear-client-btn">Limpar cliente</button>
-          </div>
-        </div>
-
-        <div class="sales-main-grid" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(300px,0.9fr);">
-          <div class="panel">
+      <div class="section-stack sales-modern-layout sales-layout-v3">
+        <div class="sales-workspace-grid">
+          <div class="panel sale-customer-panel">
             <div class="section-header">
               <div>
-                <h3>Adicionar produtos</h3>
-                <span class="muted">Use nome ou código de barras</span>
+                <h2>Vendas</h2>
+                <span class="muted">Fluxo rápido para operador de caixa</span>
               </div>
-              <span class="muted">Atalho: F2</span>
-            </div>
-
-            <div class="sales-search-toolbar" style="margin-top:12px;">
-              <div class="sales-search-main">
-                <input
-                  id="sale-product-search"
-                  type="text"
-                  placeholder="Digite nome do produto ou código de barras"
-                  autocomplete="off"
-                  value="${escapeHtml(searchTerm)}"
-                />
+              <div class="form-actions">
+                <div class="badge">${(state.cart || []).length} item(ns)</div>
+                <button class="btn btn-secondary" type="button" id="sale-open-history-btn">Histórico de vendas</button>
               </div>
             </div>
 
-            <div id="sale-search-results" class="panel-scroll" style="margin-top:12px; max-height:260px;"></div>
+            <div class="sale-customer-grid" style="margin-top:12px;">
+              <label class="sale-customer-name-field">
+                Cliente
+                <input id="sale-customer-name" type="text" value="" placeholder="Deixe em branco para cliente não identificado" />
+              </label>
+
+              <label class="sale-customer-cpf-check">
+                <span style="display:flex; align-items:center; gap:8px; min-height:42px;">
+                  <input id="sale-include-cpf" type="checkbox" style="width:auto;" />
+                  <span>Inserir CPF no cupom</span>
+                </span>
+              </label>
+
+              <label id="sale-cpf-wrap" class="sale-customer-cpf-field" style="display:none;">
+                CPF
+                <input id="sale-customer-cpf" type="text" placeholder="Digite o CPF do cliente" />
+              </label>
+            </div>
+
+            <div class="form-actions" style="margin-top:12px;">
+              <button class="btn btn-secondary" type="button" id="sale-select-client-btn">Selecionar cliente</button>
+              <button class="btn btn-secondary" type="button" id="sale-clear-client-btn">Limpar cliente</button>
+            </div>
           </div>
 
-          <div class="panel">
-            <div class="section-header">
-              <div>
-                <h3>Carrinho</h3>
-                <span class="muted">Itens adicionados à venda</span>
-              </div>
-              <span class="muted"><span id="sale-items-count">${state.cart.length}</span> item(ns)</span>
-            </div>
-
-            <div id="sale-cart-items" class="panel-scroll" style="margin-top:12px; max-height:340px;"></div>
-          </div>
-
-          <div class="panel cash-highlight">
+          <div class="panel cash-highlight sale-summary-panel">
             <div class="section-header">
               <div>
                 <h3>Resumo da venda</h3>
@@ -1575,7 +1546,7 @@ export function createSalesModule(ctx) {
               </div>
             </div>
 
-            <div class="form-grid" style="margin-top:12px; grid-template-columns:1fr 1fr;">
+            <div class="form-grid sale-summary-grid" style="margin-top:12px;">
               <label style="grid-column:1 / -1;">
                 Forma de pagamento
                 <select id="sale-payment-method">
@@ -1606,14 +1577,50 @@ export function createSalesModule(ctx) {
               <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
             </div>
 
-            <div class="form-actions" style="margin-top:14px; display:grid; grid-template-columns:1fr; gap:10px;">
+            <div class="form-actions sale-summary-actions" style="margin-top:14px; display:grid; grid-template-columns:1fr; gap:10px;">
               <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
               <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
             </div>
           </div>
+
+          <div class="panel sale-search-panel">
+            <div class="section-header">
+              <div>
+                <h3>Adicionar produtos</h3>
+                <span class="muted">Use nome ou código de barras</span>
+              </div>
+              <span class="muted">Atalho: F2</span>
+            </div>
+
+            <div class="sales-search-toolbar" style="margin-top:12px;">
+              <div class="sales-search-main">
+                <input
+                  id="sale-product-search"
+                  type="text"
+                  placeholder="Digite nome do produto ou código de barras"
+                  autocomplete="off"
+                  value="${escapeHtml(searchTerm)}"
+                />
+              </div>
+            </div>
+
+            <div id="sale-search-results" class="panel-scroll sale-search-results-v3" style="margin-top:12px;"></div>
+          </div>
+
+          <div class="panel sale-cart-panel">
+            <div class="section-header">
+              <div>
+                <h3>Carrinho</h3>
+                <span class="muted">Itens adicionados à venda</span>
+              </div>
+              <span class="muted"><span id="sale-items-count">${state.cart.length}</span> item(ns)</span>
+            </div>
+
+            <div id="sale-cart-items" class="panel-scroll sale-cart-items-v3" style="margin-top:12px;"></div>
+          </div>
         </div>
 
-        <div class="panel">
+        <div class="panel sale-shortcuts-panel">
           <div class="section-header">
             <div>
               <h3>Atalhos do teclado</h3>
@@ -1621,7 +1628,7 @@ export function createSalesModule(ctx) {
             </div>
           </div>
 
-          <div class="shortcut-card" style="margin-top:12px; grid-template-columns:repeat(6, minmax(0,1fr));">
+          <div class="shortcut-card sale-shortcuts-row" style="margin-top:12px;">
             <div class="shortcut-row">
               <span class="shortcut-key">F2</span>
               <span class="shortcut-label">Buscar produto</span>
