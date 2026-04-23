@@ -1495,7 +1495,7 @@ export function createSalesModule(ctx) {
     sync();
   }
 
-  function render() {
+ function render() {
   const { subtotal, discount, total, change } = calculateCartTotal();
 
   tabEls.sales.innerHTML = `
@@ -1518,6 +1518,10 @@ export function createSalesModule(ctx) {
           display: grid;
           grid-template-rows: auto auto minmax(0, 1fr);
           gap: 10px;
+          min-height: 0;
+        }
+
+        .sales-right-column {
           min-height: 0;
         }
 
@@ -1572,8 +1576,6 @@ export function createSalesModule(ctx) {
 
         .sale-summary-panel {
           height: fit-content;
-          position: sticky;
-          top: 0;
         }
 
         .sale-summary-panel textarea {
@@ -1587,6 +1589,33 @@ export function createSalesModule(ctx) {
 
         .sale-summary-panel .form-actions {
           margin-top: 10px !important;
+        }
+
+        .sale-shortcuts-panel {
+          margin-top: 12px;
+        }
+
+        .sale-shortcuts-panel .shortcut-card {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .sale-shortcuts-panel .shortcut-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+        }
+
+        .sale-shortcuts-panel .shortcut-key {
+          min-width: 38px;
+          text-align: center;
+          padding: 4px 6px;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.08);
+          font-weight: 700;
         }
 
         .sales-compact-page input,
@@ -1615,10 +1644,6 @@ export function createSalesModule(ctx) {
           .sale-cart-items-v3 {
             height: auto;
             max-height: 360px;
-          }
-
-          .sale-summary-panel {
-            position: static;
           }
         }
       </style>
@@ -1693,48 +1718,86 @@ export function createSalesModule(ctx) {
           </div>
         </div>
 
-        <div class="panel cash-highlight sale-summary-panel">
-          <div class="section-header">
-            <div>
-              <h3>Resumo da venda</h3>
-              <span class="muted">Valores e fechamento</span>
+        <div class="sales-right-column">
+          <div class="panel cash-highlight sale-summary-panel">
+            <div class="section-header">
+              <div>
+                <h3>Resumo da venda</h3>
+                <span class="muted">Valores e fechamento</span>
+              </div>
+            </div>
+
+            <div class="form-grid sale-summary-grid">
+              <label style="grid-column:1 / -1;">
+                Forma de pagamento
+                <select id="sale-payment-method">
+                  ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
+                </select>
+              </label>
+
+              <label>
+                Desconto
+                <input name="discount" type="number" step="0.01" min="0" value="0" />
+              </label>
+
+              <label>
+                Valor pago
+                <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
+              </label>
+
+              <label style="grid-column:1 / -1;">
+                Observações
+                <textarea name="notes" placeholder="Observações da venda"></textarea>
+              </label>
+            </div>
+
+            <div class="summary-box">
+              <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
+              <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
+              <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
+              <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
+            </div>
+
+            <div class="form-actions sale-summary-actions" style="display:grid; grid-template-columns:1fr; gap:8px;">
+              <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
+              <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
             </div>
           </div>
 
-          <div class="form-grid sale-summary-grid">
-            <label style="grid-column:1 / -1;">
-              Forma de pagamento
-              <select id="sale-payment-method">
-                ${paymentMethods.map((method) => `<option value="${escapeHtml(method)}">${escapeHtml(method)}</option>`).join('')}
-              </select>
-            </label>
+          <div class="panel sale-shortcuts-panel">
+            <div class="section-header">
+              <div>
+                <h3>Atalhos do teclado</h3>
+                <span class="muted">Ajuda rápida para o operador</span>
+              </div>
+            </div>
 
-            <label>
-              Desconto
-              <input name="discount" type="number" step="0.01" min="0" value="0" />
-            </label>
-
-            <label>
-              Valor pago
-              <input name="amountPaid" type="number" step="0.01" min="0" value="0" />
-            </label>
-
-            <label style="grid-column:1 / -1;">
-              Observações
-              <textarea name="notes" placeholder="Observações da venda"></textarea>
-            </label>
-          </div>
-
-          <div class="summary-box">
-            <div class="summary-line"><span>Subtotal</span><strong id="sale-subtotal">${currency(subtotal)}</strong></div>
-            <div class="summary-line"><span>Desconto</span><strong id="sale-discount-view">${currency(discount)}</strong></div>
-            <div class="summary-line total"><span>Total</span><strong id="sale-total">${currency(total)}</strong></div>
-            <div class="summary-line"><span>Troco</span><strong id="sale-change">${currency(change)}</strong></div>
-          </div>
-
-          <div class="form-actions sale-summary-actions" style="display:grid; grid-template-columns:1fr; gap:8px;">
-            <button class="btn btn-primary" type="button" id="finish-sale-btn">Finalizar venda</button>
-            <button class="btn btn-secondary" type="button" id="clear-cart-btn">Limpar carrinho</button>
+            <div class="shortcut-card sale-shortcuts-row">
+              <div class="shortcut-row">
+                <span class="shortcut-key">F2</span>
+                <span class="shortcut-label">Buscar produto</span>
+              </div>
+              <div class="shortcut-row">
+                <span class="shortcut-key">F3</span>
+                <span class="shortcut-label">Selecionar cliente</span>
+              </div>
+              <div class="shortcut-row">
+                <span class="shortcut-key">F4</span>
+                <span class="shortcut-label">Limpar cliente</span>
+              </div>
+              <div class="shortcut-row">
+                <span class="shortcut-key">F7</span>
+                <span class="shortcut-label">Abrir histórico</span>
+              </div>
+              <div class="shortcut-row">
+                <span class="shortcut-key">F8</span>
+                <span class="shortcut-label">Finalizar venda</span>
+              </div>
+              <div class="shortcut-row">
+                <span class="shortcut-key">ESC</span>
+                <span class="shortcut-label">Limpar carrinho</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
