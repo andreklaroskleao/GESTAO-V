@@ -9,8 +9,8 @@ const APP_SHELL = [
   './assets/js/modules/ui.js',
   './assets/js/modules/theme.js',
   './assets/js/modules/pwa.js',
-  './assets/img/icon-192.png',
-  './assets/img/icon-512.png'
+  './assets/icons/icon-192.png',
+  './assets/icons/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
