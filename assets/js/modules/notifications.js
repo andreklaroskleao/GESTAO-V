@@ -392,9 +392,13 @@ export function createNotificationsModule(ctx) {
   }
 
   async function generateSystemNotifications() {
-    if (isGeneratingNotifications) return;
+  if (isGeneratingNotifications) return;
 
-    isGeneratingNotifications = true;
+  if (!state.notificationsLoaded) {
+    return;
+  }
+
+  isGeneratingNotifications = true;
 
     try {
       const deliveries = state.deliveries || [];
