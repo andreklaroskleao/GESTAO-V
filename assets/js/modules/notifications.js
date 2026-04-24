@@ -1,10 +1,15 @@
+import {
+  doc,
+  writeBatch,
+  runTransaction
+} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+
 import { escapeHtml, showToast, bindAsyncButton } from './ui.js';
 
 export function createNotificationsModule(ctx) {
   const {
     state,
     refs,
-    createDoc,
     updateByPath
   } = ctx;
 
@@ -48,6 +53,7 @@ export function createNotificationsModule(ctx) {
   function isRead(item) {
     const currentUserId = String(state.currentUser?.uid || '');
     const readBy = Array.isArray(item.readBy) ? item.readBy : [];
+
     return item.status === 'read' || (currentUserId && readBy.includes(currentUserId));
   }
 
@@ -67,6 +73,18 @@ export function createNotificationsModule(ctx) {
     });
   }
 
+  function buildNotificationId(sourceKey) {
+    return String(sourceKey || '')
+      .trim()
+      .replaceAll('/', '_')
+      .replaceAll('\\', '_')
+      .replaceAll('#', '_')
+      .replaceAll('?', '_')
+      .replaceAll('[', '_')
+      .replaceAll(']', '_')
+      .slice(0, 140);
+  }
+
   async function createNotification({
     type = '',
     category = '',
@@ -77,23 +95,37 @@ export function createNotificationsModule(ctx) {
     eventDate = '',
     sourceKey = ''
   } = {}) {
-    if (!title || !sourceKey) return;
+    if (!title || !sourceKey || !refs.notifications) return;
 
     const exists = getRows().some((item) => item.sourceKey === sourceKey);
     if (exists) return;
 
-    await createDoc(refs.notifications, {
-      type,
-      category,
-      title,
-      message,
-      entityType,
-      entityId,
-      eventDate,
-      sourceKey,
-      status: 'unread',
-      readBy: [],
-      deleted: false
+    const notificationId = buildNotificationId(sourceKey);
+    if (!notificationId) return;
+
+    const notificationRef = doc(refs.notifications, notificationId);
+
+    await runTransaction(refs.notifications.firestore, async (transaction) => {
+      const snapshot = await transaction.get(notificationRef);
+
+      if (snapshot.exists()) {
+        return;
+      }
+
+      transaction.set(notificationRef, {
+        type,
+        category,
+        title,
+        message,
+        entityType,
+        entityId,
+        eventDate,
+        sourceKey,
+        status: 'unread',
+        readBy: [],
+        deleted: false,
+        createdAt: new Date()
+      });
     });
   }
 
@@ -108,23 +140,74 @@ export function createNotificationsModule(ctx) {
       readBy.push(currentUserId);
     }
 
+    row.status = 'read';
+    row.readBy = readBy;
+    row.updatedAt = new Date();
+
+    updateBellBadge();
+
     await updateByPath('notifications', notificationId, {
       status: 'read',
-      readBy
+      readBy,
+      updatedAt: new Date()
     });
   }
 
   async function markAllAsRead() {
     const unread = getUnreadRows();
-    for (const row of unread) {
-      await markAsRead(row.id);
+
+    if (!unread.length) {
+      showToast('Não há notificações pendentes.', 'info');
+      return;
     }
-    showToast('Notificações marcadas como lidas.', 'success');
+
+    if (!refs.notifications) {
+      showToast('Referência de notificações indisponível.', 'error');
+      return;
+    }
+
+    const currentUserId = String(state.currentUser?.uid || '');
+    const now = new Date();
+
+    unread.forEach((row) => {
+      const readBy = Array.isArray(row.readBy) ? [...row.readBy] : [];
+
+      if (currentUserId && !readBy.includes(currentUserId)) {
+        readBy.push(currentUserId);
+      }
+
+      row.status = 'read';
+      row.readBy = readBy;
+      row.updatedAt = now;
+    });
+
+    updateBellBadge();
+
+    const db = refs.notifications.firestore;
+    const batchSize = 450;
+
+    for (let i = 0; i < unread.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = unread.slice(i, i + batchSize);
+
+      chunk.forEach((row) => {
+        batch.update(doc(refs.notifications, row.id), {
+          status: 'read',
+          readBy: row.readBy,
+          updatedAt: now
+        });
+      });
+
+      await batch.commit();
+    }
+
+    showToast('Todas as notificações foram marcadas como lidas.', 'success');
   }
 
   function updateBellBadge() {
     const badge = document.getElementById('notifications-badge');
     if (!badge) return;
+
     badge.textContent = String(getUnreadRows().length);
   }
 
@@ -164,7 +247,7 @@ export function createNotificationsModule(ctx) {
             <span>${escapeHtml(item.message || '-')}</span>
             <span>${escapeHtml(item.category || '-')} · ${escapeHtml(formatNotificationDate(item.createdAt))}</span>
             <div class="form-actions">
-              ${isRead(item) ? '' : `<button class="btn btn-secondary" type="button" data-notification-read="${item.id}">Marcar como lida</button>`}
+              ${isRead(item) ? '' : `<button class="btn btn-secondary" type="button" data-notification-read="${escapeHtml(item.id)}">Marcar como lida</button>`}
             </div>
           </div>
         `).join('')}
@@ -222,17 +305,22 @@ export function createNotificationsModule(ctx) {
     };
 
     modalRoot.querySelector('#notifications-close-btn')?.addEventListener('click', closeModal);
+
     modalRoot.querySelector('#notifications-modal-backdrop')?.addEventListener('click', (event) => {
       if (event.target.id === 'notifications-modal-backdrop') {
         closeModal();
       }
     });
 
-    bindAsyncButton(modalRoot.querySelector('#notifications-mark-all-btn'), async () => {
-      await markAllAsRead();
-      closeModal();
-      openNotificationsModal();
-    }, { busyLabel: 'Processando...' });
+    bindAsyncButton(
+      modalRoot.querySelector('#notifications-mark-all-btn'),
+      async () => {
+        await markAllAsRead();
+        closeModal();
+        openNotificationsModal();
+      },
+      { busyLabel: 'Processando...' }
+    );
 
     modalRoot.querySelector('#notifications-filter-apply')?.addEventListener('click', () => {
       filters.category = modalRoot.querySelector('#notifications-filter-category')?.value || '';
@@ -249,6 +337,7 @@ export function createNotificationsModule(ctx) {
         dateFrom: '',
         dateTo: ''
       };
+
       openNotificationsModal();
     });
 
@@ -265,6 +354,7 @@ export function createNotificationsModule(ctx) {
     if (!bellBtn || bellBtn.dataset.bound === 'true') return;
 
     bellBtn.dataset.bound = 'true';
+
     bellBtn.addEventListener('click', () => {
       openNotificationsModal();
     });
