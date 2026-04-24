@@ -2762,3 +2762,109 @@ body.theme-light .sales-modern-layout .shortcut-key {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+
+/* =========================
+   CORREÇÃO FINAL - VENDAS COM CARRINHO ROLÁVEL
+   ========================= */
+
+#tab-sales .sales-compact-page {
+  height: calc(100vh - 78px);
+  overflow: hidden;
+}
+
+#tab-sales .sales-compact-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+#tab-sales .sales-compact-left {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+#tab-sales .sale-cart-panel {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#tab-sales .sale-cart-items-v3 {
+  flex: 1;
+  min-height: 120px;
+  max-height: calc(100vh - 505px);
+  overflow-y: auto !important;
+  overflow-x: auto;
+  padding-right: 6px;
+}
+
+#tab-sales .sale-cart-items-v3 .table-wrap {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+#tab-sales .sale-cart-items-v3 table {
+  min-width: 760px;
+}
+
+#tab-sales .sale-search-results-v3 {
+  min-height: 76px;
+  max-height: 128px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#tab-sales .sales-right-column {
+  min-height: 0;
+}
+
+#tab-sales .sale-shortcuts-panel {
+  margin-top: 12px;
+}
+
+#tab-sales .sale-shortcuts-panel .shortcut-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#tab-sales .sale-shortcuts-panel .shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+#tab-sales .sale-shortcuts-panel .shortcut-key {
+  min-width: 38px;
+  text-align: center;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+
+@media (max-width: 1100px) {
+  #tab-sales .sales-compact-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  #tab-sales .sales-compact-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  #tab-sales .sale-cart-items-v3 {
+    flex: none;
+    height: auto;
+    max-height: 360px;
+  }
+}
