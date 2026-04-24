@@ -1,17 +1,7 @@
-import {
-  doc,
-  writeBatch,
-  runTransaction
-} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
-
-import { escapeHtml, showToast, bindAsyncButton } from './ui.js';
+import { escapeHtml } from './ui.js';
 
 export function createNotificationsModule(ctx) {
-  const {
-    state,
-    refs,
-    updateByPath
-  } = ctx;
+  const { state } = ctx;
 
   let filters = {
     category: '',
@@ -20,9 +10,19 @@ export function createNotificationsModule(ctx) {
     dateTo: ''
   };
 
-  let isGeneratingNotifications = false;
-  const pendingSourceKeys = new Set();
-  const MAX_NOTIFICATIONS_PER_RUN = 80;
+  const READ_ALERTS_KEY = 'gestao-read-alerts-v1';
+
+  function getReadKeys() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(READ_ALERTS_KEY) || '[]'));
+    } catch (error) {
+      return new Set();
+    }
+  }
+
+  function saveReadKeys(keys) {
+    localStorage.setItem(READ_ALERTS_KEY, JSON.stringify([...keys]));
+  }
 
   function normalizeDateKey(value) {
     if (!value) return '';
@@ -50,192 +50,146 @@ export function createNotificationsModule(ctx) {
     return '';
   }
 
-  function getRows() {
-    return Array.isArray(state.notifications) ? state.notifications : [];
+  function todayKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }
 
-  function isRead(item) {
-    const currentUserId = String(state.currentUser?.uid || '');
-    const readBy = Array.isArray(item.readBy) ? item.readBy : [];
-
-    return item.status === 'read' || (currentUserId && readBy.includes(currentUserId));
+  function isOverdue(dateValue) {
+    const key = normalizeDateKey(dateValue);
+    return key && key < todayKey();
   }
 
-  function getUnreadRows() {
-    return getRows().filter((item) => !isRead(item));
+  function isDueToday(dateValue) {
+    const key = normalizeDateKey(dateValue);
+    return key && key === todayKey();
   }
 
-  function getFilteredRows() {
-    return getRows().filter((item) => {
-      const createdKey = normalizeDateKey(item.createdAt);
-      const rowStatus = isRead(item) ? 'read' : 'unread';
+  function isRead(alert) {
+    return getReadKeys().has(alert.sourceKey);
+  }
 
-      return (!filters.category || String(item.category || '') === filters.category)
+  function getCalculatedAlerts() {
+    const alerts = [];
+    const lowStockThreshold = Number(state.settings?.lowStockThreshold || 5);
+
+    (state.products || []).forEach((item) => {
+      if (item.deleted === true || item.status === 'inativo') return;
+
+      const quantity = Number(item.quantity || 0);
+
+      if (quantity <= lowStockThreshold) {
+        alerts.push({
+          sourceKey: `low_stock_${item.id}_${quantity}`,
+          category: 'estoque',
+          type: 'low_stock',
+          title: 'Estoque baixo',
+          message: `${item.name || 'Produto'} com estoque em ${quantity}.`,
+          eventDate: normalizeDateKey(item.updatedAt || item.createdAt),
+          createdAt: item.updatedAt || item.createdAt || new Date()
+        });
+      }
+    });
+
+    (state.deliveries || []).forEach((item) => {
+      if (item.deleted === true) return;
+
+      const status = String(item.status || '').toLowerCase();
+
+      if (status.includes('pendente')) {
+        alerts.push({
+          sourceKey: `delivery_pending_${item.id}_${item.status || ''}`,
+          category: 'tele_entrega',
+          type: 'delivery_pending',
+          title: 'Tele-entrega pendente',
+          message: `Entrega de ${item.customerName || 'cliente'} aguardando ação.`,
+          eventDate: normalizeDateKey(item.scheduledAt),
+          createdAt: item.scheduledAt || item.createdAt || new Date()
+        });
+      }
+    });
+
+    (state.accountsReceivable || []).forEach((item) => {
+      if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) return;
+
+      if (isOverdue(item.dueDate) || isDueToday(item.dueDate)) {
+        alerts.push({
+          sourceKey: `receivable_due_${item.id}_${item.dueDate}`,
+          category: 'contas',
+          type: 'receivable_due',
+          title: isOverdue(item.dueDate) ? 'Conta a receber vencida' : 'Conta a receber vence hoje',
+          message: `${item.clientName || 'Cliente'} · vencimento ${item.dueDate}.`,
+          eventDate: item.dueDate,
+          createdAt: item.dueDate
+        });
+      }
+    });
+
+    (state.accountsPayable || []).forEach((item) => {
+      if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) return;
+
+      if (isOverdue(item.dueDate) || isDueToday(item.dueDate)) {
+        alerts.push({
+          sourceKey: `payable_due_${item.id}_${item.dueDate}`,
+          category: 'contas',
+          type: 'payable_due',
+          title: isOverdue(item.dueDate) ? 'Conta a pagar vencida' : 'Conta a pagar vence hoje',
+          message: `${item.supplierName || 'Fornecedor'} · vencimento ${item.dueDate}.`,
+          eventDate: item.dueDate,
+          createdAt: item.dueDate
+        });
+      }
+    });
+
+    return alerts.sort((a, b) => {
+      const aRead = isRead(a) ? 1 : 0;
+      const bRead = isRead(b) ? 1 : 0;
+
+      if (aRead !== bRead) return aRead - bRead;
+
+      return String(b.eventDate || '').localeCompare(String(a.eventDate || ''));
+    });
+  }
+
+  function getUnreadAlerts() {
+    return getCalculatedAlerts().filter((alert) => !isRead(alert));
+  }
+
+  function getFilteredAlerts() {
+    return getCalculatedAlerts().filter((alert) => {
+      const createdKey = normalizeDateKey(alert.createdAt || alert.eventDate);
+      const rowStatus = isRead(alert) ? 'read' : 'unread';
+
+      return (!filters.category || String(alert.category || '') === filters.category)
         && (!filters.status || rowStatus === filters.status)
         && (!filters.dateFrom || !createdKey || createdKey >= filters.dateFrom)
         && (!filters.dateTo || !createdKey || createdKey <= filters.dateTo);
     });
   }
 
-  function buildNotificationId(sourceKey) {
-    return String(sourceKey || '')
-      .trim()
-      .replaceAll('/', '_')
-      .replaceAll('\\', '_')
-      .replaceAll('#', '_')
-      .replaceAll('?', '_')
-      .replaceAll('[', '_')
-      .replaceAll(']', '_')
-      .slice(0, 140);
-  }
-
-  async function createNotification({
-    type = '',
-    category = '',
-    title = '',
-    message = '',
-    entityType = '',
-    entityId = '',
-    eventDate = '',
-    sourceKey = ''
-  } = {}) {
-    if (!title || !sourceKey || !refs.notifications) return false;
-
-    const normalizedSourceKey = String(sourceKey).trim();
-    if (!normalizedSourceKey) return false;
-
-    const exists = getRows().some((item) => item.sourceKey === normalizedSourceKey);
-    if (exists || pendingSourceKeys.has(normalizedSourceKey)) return false;
-
-    const notificationId = buildNotificationId(normalizedSourceKey);
-    if (!notificationId) return false;
-
-    pendingSourceKeys.add(normalizedSourceKey);
-
-    try {
-      const notificationRef = doc(refs.notifications, notificationId);
-
-      await runTransaction(refs.notifications.firestore, async (transaction) => {
-        const snapshot = await transaction.get(notificationRef);
-
-        if (snapshot.exists()) {
-          return;
-        }
-
-        transaction.set(notificationRef, {
-          type,
-          category,
-          title,
-          message,
-          entityType,
-          entityId,
-          eventDate,
-          sourceKey: normalizedSourceKey,
-          status: 'unread',
-          readBy: [],
-          deleted: false,
-          createdAt: new Date()
-        });
-      });
-
-      return true;
-    } catch (error) {
-      if (
-        error?.code === 'already-exists' ||
-        error?.code === 'aborted' ||
-        error?.code === 'cancelled' ||
-        String(error?.message || '').includes('already-exists')
-      ) {
-        return false;
-      }
-
-      console.error('Erro ao criar notificação:', error);
-      return false;
-    } finally {
-      pendingSourceKeys.delete(normalizedSourceKey);
-    }
-  }
-
-  async function markAsRead(notificationId) {
-    const row = getRows().find((item) => item.id === notificationId);
-    if (!row) return;
-
-    const currentUserId = String(state.currentUser?.uid || '');
-    const readBy = Array.isArray(row.readBy) ? [...row.readBy] : [];
-
-    if (currentUserId && !readBy.includes(currentUserId)) {
-      readBy.push(currentUserId);
-    }
-
-    row.status = 'read';
-    row.readBy = readBy;
-    row.updatedAt = new Date();
-
+  function markAsRead(sourceKey) {
+    const keys = getReadKeys();
+    keys.add(sourceKey);
+    saveReadKeys(keys);
     updateBellBadge();
-
-    await updateByPath('notifications', notificationId, {
-      status: 'read',
-      readBy,
-      updatedAt: new Date()
-    });
   }
 
-  async function markAllAsRead() {
-    const unread = getUnreadRows();
+  function markAllAsRead() {
+    const keys = getReadKeys();
 
-    if (!unread.length) {
-      showToast('Não há notificações pendentes.', 'info');
-      return;
-    }
-
-    if (!refs.notifications) {
-      showToast('Referência de notificações indisponível.', 'error');
-      return;
-    }
-
-    const currentUserId = String(state.currentUser?.uid || '');
-    const now = new Date();
-
-    unread.forEach((row) => {
-      const readBy = Array.isArray(row.readBy) ? [...row.readBy] : [];
-
-      if (currentUserId && !readBy.includes(currentUserId)) {
-        readBy.push(currentUserId);
-      }
-
-      row.status = 'read';
-      row.readBy = readBy;
-      row.updatedAt = now;
+    getCalculatedAlerts().forEach((alert) => {
+      keys.add(alert.sourceKey);
     });
 
+    saveReadKeys(keys);
     updateBellBadge();
-
-    const db = refs.notifications.firestore;
-    const batchSize = 450;
-
-    for (let i = 0; i < unread.length; i += batchSize) {
-      const batch = writeBatch(db);
-      const chunk = unread.slice(i, i + batchSize);
-
-      chunk.forEach((row) => {
-        batch.update(doc(refs.notifications, row.id), {
-          status: 'read',
-          readBy: row.readBy,
-          updatedAt: now
-        });
-      });
-
-      await batch.commit();
-    }
-
-    showToast('Todas as notificações foram marcadas como lidas.', 'success');
   }
 
   function updateBellBadge() {
     const badge = document.getElementById('notifications-badge');
     if (!badge) return;
 
-    badge.textContent = String(getUnreadRows().length);
+    badge.textContent = String(getUnreadAlerts().length);
   }
 
   function formatNotificationDate(value) {
@@ -257,8 +211,8 @@ export function createNotificationsModule(ctx) {
     if (!rows.length) {
       return `
         <div class="empty-state">
-          <strong>Sem notificações</strong>
-          <span>Nenhum registro encontrado para os filtros aplicados.</span>
+          <strong>Sem alertas</strong>
+          <span>Nenhum alerta encontrado para os filtros aplicados.</span>
         </div>
       `;
     }
@@ -269,14 +223,14 @@ export function createNotificationsModule(ctx) {
           <div class="list-item notification-row ${isRead(item) ? 'is-read' : 'is-unread'}">
             <div class="notification-row-top">
               <strong>${escapeHtml(item.title || '-')}</strong>
-              <span class="tag ${isRead(item) ? 'info' : 'warning'}">${isRead(item) ? 'Lida' : 'Não lida'}</span>
+              <span class="tag ${isRead(item) ? 'info' : 'warning'}">${isRead(item) ? 'Lido' : 'Novo'}</span>
             </div>
 
             <span>${escapeHtml(item.message || '-')}</span>
-            <span>${escapeHtml(item.category || '-')} · ${escapeHtml(formatNotificationDate(item.createdAt))}</span>
+            <span>${escapeHtml(item.category || '-')} · ${escapeHtml(formatNotificationDate(item.eventDate || item.createdAt))}</span>
 
             <div class="form-actions">
-              ${isRead(item) ? '' : `<button class="btn btn-secondary" type="button" data-notification-read="${escapeHtml(item.id)}">Marcar como lida</button>`}
+              ${isRead(item) ? '' : `<button class="btn btn-secondary" type="button" data-alert-read="${escapeHtml(item.sourceKey)}">Marcar como lido</button>`}
             </div>
           </div>
         `).join('')}
@@ -288,16 +242,16 @@ export function createNotificationsModule(ctx) {
     const modalRoot = document.getElementById('modal-root');
     if (!modalRoot) return;
 
-    const rows = getFilteredRows();
+    const rows = getFilteredAlerts();
 
     modalRoot.innerHTML = `
       <div class="modal-backdrop" id="notifications-modal-backdrop">
         <div class="modal-card notifications-modal-card">
           <div class="section-header">
-            <h2>Notificações</h2>
+            <h2>Alertas</h2>
 
             <div class="form-actions">
-              <button class="btn btn-secondary" type="button" id="notifications-mark-all-btn">Marcar todas como lidas</button>
+              <button class="btn btn-secondary" type="button" id="notifications-mark-all-btn">Marcar todos como lidos</button>
               <button class="btn btn-secondary" type="button" id="notifications-close-btn">Fechar</button>
             </div>
           </div>
@@ -312,8 +266,8 @@ export function createNotificationsModule(ctx) {
 
             <select id="notifications-filter-status">
               <option value="">Todos</option>
-              <option value="unread" ${filters.status === 'unread' ? 'selected' : ''}>Não lidas</option>
-              <option value="read" ${filters.status === 'read' ? 'selected' : ''}>Lidas</option>
+              <option value="unread" ${filters.status === 'unread' ? 'selected' : ''}>Novos</option>
+              <option value="read" ${filters.status === 'read' ? 'selected' : ''}>Lidos</option>
             </select>
 
             <input id="notifications-filter-date-from" type="date" value="${filters.dateFrom}" />
@@ -342,15 +296,10 @@ export function createNotificationsModule(ctx) {
       }
     });
 
-    bindAsyncButton(
-      modalRoot.querySelector('#notifications-mark-all-btn'),
-      async () => {
-        await markAllAsRead();
-        closeModal();
-        openNotificationsModal();
-      },
-      { busyLabel: 'Processando...' }
-    );
+    modalRoot.querySelector('#notifications-mark-all-btn')?.addEventListener('click', () => {
+      markAllAsRead();
+      openNotificationsModal();
+    });
 
     modalRoot.querySelector('#notifications-filter-apply')?.addEventListener('click', () => {
       filters.category = modalRoot.querySelector('#notifications-filter-category')?.value || '';
@@ -372,9 +321,9 @@ export function createNotificationsModule(ctx) {
       openNotificationsModal();
     });
 
-    modalRoot.querySelectorAll('[data-notification-read]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        await markAsRead(btn.dataset.notificationRead);
+    modalRoot.querySelectorAll('[data-alert-read]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        markAsRead(btn.dataset.alertRead);
         openNotificationsModal();
       });
     });
@@ -392,103 +341,7 @@ export function createNotificationsModule(ctx) {
   }
 
   async function generateSystemNotifications() {
-  if (isGeneratingNotifications) return;
-
-  if (!state.notificationsLoaded) {
-    return;
-  }
-
-  isGeneratingNotifications = true;
-
-    try {
-      const deliveries = state.deliveries || [];
-      const products = state.products || [];
-      const receivables = state.accountsReceivable || [];
-      const payables = state.accountsPayable || [];
-      const lowStockThreshold = Number(state.settings?.lowStockThreshold || 5);
-
-      let createdCount = 0;
-
-      async function safeCreateNotification(payload) {
-        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) return;
-
-        const created = await createNotification(payload);
-
-        if (created) {
-          createdCount += 1;
-        }
-      }
-
-      for (const item of deliveries) {
-        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
-        if (item.deleted === true) continue;
-
-        if (String(item.status || '').toLowerCase().includes('pendente')) {
-          await safeCreateNotification({
-            type: 'delivery_pending',
-            category: 'tele_entrega',
-            title: 'Tele-entrega pendente',
-            message: `Entrega de ${item.customerName || 'cliente'} aguardando ação.`,
-            entityType: 'delivery',
-            entityId: item.id,
-            eventDate: normalizeDateKey(item.scheduledAt),
-            sourceKey: `delivery_pending_${item.id}`
-          });
-        }
-      }
-
-      for (const item of products) {
-        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
-        if (item.deleted === true) continue;
-
-        if (Number(item.quantity || 0) <= lowStockThreshold) {
-          await safeCreateNotification({
-            type: 'low_stock',
-            category: 'estoque',
-            title: 'Estoque baixo',
-            message: `${item.name || 'Produto'} com estoque em ${Number(item.quantity || 0)}.`,
-            entityType: 'product',
-            entityId: item.id,
-            eventDate: normalizeDateKey(item.updatedAt || item.createdAt),
-            sourceKey: `low_stock_${item.id}`
-          });
-        }
-      }
-
-      for (const item of receivables) {
-        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
-        if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) continue;
-
-        await safeCreateNotification({
-          type: 'receivable_due',
-          category: 'contas',
-          title: 'Conta a receber pendente',
-          message: `${item.clientName || 'Cliente'} · vencimento ${item.dueDate}.`,
-          entityType: 'account_receivable',
-          entityId: item.id,
-          eventDate: item.dueDate,
-          sourceKey: `receivable_due_${item.id}`
-        });
-      }
-
-      for (const item of payables) {
-        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
-        if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) continue;
-
-        await safeCreateNotification({
-          type: 'payable_due',
-          category: 'contas',
-          title: 'Conta a pagar pendente',
-          message: `${item.supplierName || 'Fornecedor'} · vencimento ${item.dueDate}.`,
-          entityType: 'account_payable',
-          entityId: item.id,
-          eventDate: item.dueDate,
-          sourceKey: `payable_due_${item.id}`
-        });
-      }
-    } finally {
-      isGeneratingNotifications = false;
-    }
+    updateBellBadge();
   }
 
   return {
