@@ -186,6 +186,20 @@ service cloud.firestore {
       allow delete: if isMaster();
     }
 
+    match /notifications/{docId} {
+      allow read: if isActiveUser();
+
+      allow create: if isActiveUser();
+
+      allow update: if isActiveUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "readBy"
+        ]);
+
+      allow delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
