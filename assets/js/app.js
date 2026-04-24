@@ -774,17 +774,6 @@ function bootstrapData() {
     state.purchases = rows;
     renderPurchases();
   }));
-
-   state.unsubscribe.push(subscribeCollection('notifications', [orderBy('createdAt', 'desc')], (rows) => {
-  state.notifications = rows.filter((item) => item.deleted !== true);
-  state.notificationsLoaded = true;
-
-  try {
-    notificationsModule.updateBellBadge?.();
-  } catch (error) {
-    console.error(error);
-  }
-}));
 }
 
 async function handleLogin(event) {
