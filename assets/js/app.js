@@ -103,6 +103,7 @@ const state = {
   clients: [],
   suppliers: [],
   notifications: [],
+  notificationsLoaded: false,
   inventoryMovements: [],
   auditLogs: [],
   cashSessions: [],
@@ -575,6 +576,7 @@ function resetAppState() {
   state.clients = [];
   state.suppliers = [];
   state.notifications = [];
+  state.notificationsLoaded = false;
   state.inventoryMovements = [];
   state.auditLogs = [];
   state.cashSessions = [];
@@ -773,15 +775,16 @@ function bootstrapData() {
     renderPurchases();
   }));
 
-  state.unsubscribe.push(subscribeCollection('notifications', [orderBy('createdAt', 'desc')], (rows) => {
-    state.notifications = rows.filter((item) => item.deleted !== true);
+   state.unsubscribe.push(subscribeCollection('notifications', [orderBy('createdAt', 'desc')], (rows) => {
+  state.notifications = rows.filter((item) => item.deleted !== true);
+  state.notificationsLoaded = true;
 
-    try {
-      notificationsModule.updateBellBadge?.();
-    } catch (error) {
-      console.error(error);
-    }
-  }));
+  try {
+    notificationsModule.updateBellBadge?.();
+  } catch (error) {
+    console.error(error);
+  }
+}));
 }
 
 async function handleLogin(event) {
