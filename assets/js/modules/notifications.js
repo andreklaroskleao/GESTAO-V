@@ -20,6 +20,10 @@ export function createNotificationsModule(ctx) {
     dateTo: ''
   };
 
+  let isGeneratingNotifications = false;
+  const pendingSourceKeys = new Set();
+  const MAX_NOTIFICATIONS_PER_RUN = 80;
+
   function normalizeDateKey(value) {
     if (!value) return '';
 
@@ -95,38 +99,61 @@ export function createNotificationsModule(ctx) {
     eventDate = '',
     sourceKey = ''
   } = {}) {
-    if (!title || !sourceKey || !refs.notifications) return;
+    if (!title || !sourceKey || !refs.notifications) return false;
 
-    const exists = getRows().some((item) => item.sourceKey === sourceKey);
-    if (exists) return;
+    const normalizedSourceKey = String(sourceKey).trim();
+    if (!normalizedSourceKey) return false;
 
-    const notificationId = buildNotificationId(sourceKey);
-    if (!notificationId) return;
+    const exists = getRows().some((item) => item.sourceKey === normalizedSourceKey);
+    if (exists || pendingSourceKeys.has(normalizedSourceKey)) return false;
 
-    const notificationRef = doc(refs.notifications, notificationId);
+    const notificationId = buildNotificationId(normalizedSourceKey);
+    if (!notificationId) return false;
 
-    await runTransaction(refs.notifications.firestore, async (transaction) => {
-      const snapshot = await transaction.get(notificationRef);
+    pendingSourceKeys.add(normalizedSourceKey);
 
-      if (snapshot.exists()) {
-        return;
+    try {
+      const notificationRef = doc(refs.notifications, notificationId);
+
+      await runTransaction(refs.notifications.firestore, async (transaction) => {
+        const snapshot = await transaction.get(notificationRef);
+
+        if (snapshot.exists()) {
+          return;
+        }
+
+        transaction.set(notificationRef, {
+          type,
+          category,
+          title,
+          message,
+          entityType,
+          entityId,
+          eventDate,
+          sourceKey: normalizedSourceKey,
+          status: 'unread',
+          readBy: [],
+          deleted: false,
+          createdAt: new Date()
+        });
+      });
+
+      return true;
+    } catch (error) {
+      if (
+        error?.code === 'already-exists' ||
+        error?.code === 'aborted' ||
+        error?.code === 'cancelled' ||
+        String(error?.message || '').includes('already-exists')
+      ) {
+        return false;
       }
 
-      transaction.set(notificationRef, {
-        type,
-        category,
-        title,
-        message,
-        entityType,
-        entityId,
-        eventDate,
-        sourceKey,
-        status: 'unread',
-        readBy: [],
-        deleted: false,
-        createdAt: new Date()
-      });
-    });
+      console.error('Erro ao criar notificação:', error);
+      return false;
+    } finally {
+      pendingSourceKeys.delete(normalizedSourceKey);
+    }
   }
 
   async function markAsRead(notificationId) {
@@ -244,8 +271,10 @@ export function createNotificationsModule(ctx) {
               <strong>${escapeHtml(item.title || '-')}</strong>
               <span class="tag ${isRead(item) ? 'info' : 'warning'}">${isRead(item) ? 'Lida' : 'Não lida'}</span>
             </div>
+
             <span>${escapeHtml(item.message || '-')}</span>
             <span>${escapeHtml(item.category || '-')} · ${escapeHtml(formatNotificationDate(item.createdAt))}</span>
+
             <div class="form-actions">
               ${isRead(item) ? '' : `<button class="btn btn-secondary" type="button" data-notification-read="${escapeHtml(item.id)}">Marcar como lida</button>`}
             </div>
@@ -266,6 +295,7 @@ export function createNotificationsModule(ctx) {
         <div class="modal-card notifications-modal-card">
           <div class="section-header">
             <h2>Notificações</h2>
+
             <div class="form-actions">
               <button class="btn btn-secondary" type="button" id="notifications-mark-all-btn">Marcar todas como lidas</button>
               <button class="btn btn-secondary" type="button" id="notifications-close-btn">Fechar</button>
@@ -327,6 +357,7 @@ export function createNotificationsModule(ctx) {
       filters.status = modalRoot.querySelector('#notifications-filter-status')?.value || '';
       filters.dateFrom = modalRoot.querySelector('#notifications-filter-date-from')?.value || '';
       filters.dateTo = modalRoot.querySelector('#notifications-filter-date-to')?.value || '';
+
       openNotificationsModal();
     });
 
@@ -361,74 +392,98 @@ export function createNotificationsModule(ctx) {
   }
 
   async function generateSystemNotifications() {
-    const deliveries = state.deliveries || [];
-    const products = state.products || [];
-    const receivables = state.accountsReceivable || [];
-    const payables = state.accountsPayable || [];
-    const lowStockThreshold = Number(state.settings?.lowStockThreshold || 5);
+    if (isGeneratingNotifications) return;
 
-    for (const item of deliveries) {
-      if (item.deleted === true) continue;
+    isGeneratingNotifications = true;
 
-      if (String(item.status || '').toLowerCase().includes('pendente')) {
-        await createNotification({
-          type: 'delivery_pending',
-          category: 'tele_entrega',
-          title: 'Tele-entrega pendente',
-          message: `Entrega de ${item.customerName || 'cliente'} aguardando ação.`,
-          entityType: 'delivery',
+    try {
+      const deliveries = state.deliveries || [];
+      const products = state.products || [];
+      const receivables = state.accountsReceivable || [];
+      const payables = state.accountsPayable || [];
+      const lowStockThreshold = Number(state.settings?.lowStockThreshold || 5);
+
+      let createdCount = 0;
+
+      async function safeCreateNotification(payload) {
+        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) return;
+
+        const created = await createNotification(payload);
+
+        if (created) {
+          createdCount += 1;
+        }
+      }
+
+      for (const item of deliveries) {
+        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
+        if (item.deleted === true) continue;
+
+        if (String(item.status || '').toLowerCase().includes('pendente')) {
+          await safeCreateNotification({
+            type: 'delivery_pending',
+            category: 'tele_entrega',
+            title: 'Tele-entrega pendente',
+            message: `Entrega de ${item.customerName || 'cliente'} aguardando ação.`,
+            entityType: 'delivery',
+            entityId: item.id,
+            eventDate: normalizeDateKey(item.scheduledAt),
+            sourceKey: `delivery_pending_${item.id}`
+          });
+        }
+      }
+
+      for (const item of products) {
+        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
+        if (item.deleted === true) continue;
+
+        if (Number(item.quantity || 0) <= lowStockThreshold) {
+          await safeCreateNotification({
+            type: 'low_stock',
+            category: 'estoque',
+            title: 'Estoque baixo',
+            message: `${item.name || 'Produto'} com estoque em ${Number(item.quantity || 0)}.`,
+            entityType: 'product',
+            entityId: item.id,
+            eventDate: normalizeDateKey(item.updatedAt || item.createdAt),
+            sourceKey: `low_stock_${item.id}`
+          });
+        }
+      }
+
+      for (const item of receivables) {
+        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
+        if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) continue;
+
+        await safeCreateNotification({
+          type: 'receivable_due',
+          category: 'contas',
+          title: 'Conta a receber pendente',
+          message: `${item.clientName || 'Cliente'} · vencimento ${item.dueDate}.`,
+          entityType: 'account_receivable',
           entityId: item.id,
-          eventDate: normalizeDateKey(item.scheduledAt),
-          sourceKey: `delivery_pending_${item.id}`
+          eventDate: item.dueDate,
+          sourceKey: `receivable_due_${item.id}`
         });
       }
-    }
 
-    for (const item of products) {
-      if (item.deleted === true) continue;
+      for (const item of payables) {
+        if (createdCount >= MAX_NOTIFICATIONS_PER_RUN) break;
+        if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) continue;
 
-      if (Number(item.quantity || 0) <= lowStockThreshold) {
-        await createNotification({
-          type: 'low_stock',
-          category: 'estoque',
-          title: 'Estoque baixo',
-          message: `${item.name || 'Produto'} com estoque em ${Number(item.quantity || 0)}.`,
-          entityType: 'product',
+        await safeCreateNotification({
+          type: 'payable_due',
+          category: 'contas',
+          title: 'Conta a pagar pendente',
+          message: `${item.supplierName || 'Fornecedor'} · vencimento ${item.dueDate}.`,
+          entityType: 'account_payable',
           entityId: item.id,
-          eventDate: normalizeDateKey(item.updatedAt || item.createdAt),
-          sourceKey: `low_stock_${item.id}`
+          eventDate: item.dueDate,
+          sourceKey: `payable_due_${item.id}`
         });
       }
-    }
-
-    for (const item of receivables) {
-      if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) continue;
-
-      await createNotification({
-        type: 'receivable_due',
-        category: 'contas',
-        title: 'Conta a receber pendente',
-        message: `${item.clientName || 'Cliente'} · vencimento ${item.dueDate}.`,
-        entityType: 'account_receivable',
-        entityId: item.id,
-        eventDate: item.dueDate,
-        sourceKey: `receivable_due_${item.id}`
-      });
-    }
-
-    for (const item of payables) {
-      if (item.deleted === true || Number(item.openAmount || 0) <= 0 || !item.dueDate) continue;
-
-      await createNotification({
-        type: 'payable_due',
-        category: 'contas',
-        title: 'Conta a pagar pendente',
-        message: `${item.supplierName || 'Fornecedor'} · vencimento ${item.dueDate}.`,
-        entityType: 'account_payable',
-        entityId: item.id,
-        eventDate: item.dueDate,
-        sourceKey: `payable_due_${item.id}`
-      });
+    } finally {
+      isGeneratingNotifications = false;
     }
   }
 
